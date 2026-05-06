@@ -1,0 +1,658 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// MODELS BASE EXISTENTES / NECESSÁRIOS
+// ==========================================
+
+model User {
+  id            String    @id @default(cuid())
+  clerkId       String    @unique
+  name          String
+  email         String    @unique
+  avatarUrl     String?
+  role          String    @default("criativo") // admin, gestor, criativo
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  logoUrl       String?
+  status        String    @default("Ativo")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Integração Asaas
+  asaasCustomerId String?
+
+  // Relações CRM
+  members       ClientMember[]
+  portalConfig  ClientPortalConfig?
+  materials     ClientMaterial[]
+  solicitacoes  ClientSolicitacao[]
+  relatorios    ClientRelatorio[]
+  invoices      Invoice[]
+  recurrences   Recurrence[]
+  rdStationLeads RdStationLead[]
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  status        String    @default("A fazer")
+  priority      String[]
+  dueDate       DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relações Operações
+  alocacoes     CollaboratorAlocacao[]
+}
+
+// ==========================================
+// 🆕 MÓDULO CRM — ÁREA DE MEMBROS
+// ==========================================
+
+model ClientMember {
+  id                String    @id @default(cuid())
+  clientId          String
+  client            Client    @relation(fields: [clientId], references: [id])
+  name              String
+  email             String
+  password          String
+  avatarUrl         String?
+  role              String    @default("VISUALIZADOR")
+  jobTitle          String?
+  phone             String?
+  status            String    @default("pendente")
+  whatsappNotif     Boolean   @default(false)
+  lastAccessAt      DateTime?
+  joinedAt          DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+  
+  permissions       ClientMemberPermission?
+  invites           ClientMemberInvite[]
+  accessLogs        ClientMemberAccessLog[]
+  downloadLogs      ClientMaterialDownload[]
+  solicitacoes      ClientSolicitacao[]
+}
+
+model ClientMemberPermission {
+  id                      String        @id @default(cuid())
+  memberId                String        @unique
+  member                  ClientMember  @relation(fields: [memberId], references: [id])
+  verAprovacoes           Boolean       @default(true)
+  aprovar                 Boolean       @default(true)
+  verHistoricoAprovacoes  Boolean       @default(true)
+  acessarMateriais        Boolean       @default(true)
+  baixarArquivos          Boolean       @default(true)
+  verRelatorios           Boolean       @default(false)
+  fazerSolicitacoes       Boolean       @default(true)
+  verFinanceiro           Boolean       @default(false)
+  gerenciarMembros        Boolean       @default(false)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+}
+
+model ClientMemberInvite {
+  id          String        @id @default(cuid())
+  memberId    String
+  member      ClientMember  @relation(fields: [memberId], references: [id])
+  token       String        @unique @default(cuid())
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime      @default(now())
+}
+
+model ClientMemberAccessLog {
+  id          String        @id @default(cuid())
+  memberId    String
+  member      ClientMember  @relation(fields: [memberId], references: [id])
+  accessedAt  DateTime      @default(now())
+  ipAddress   String?
+  userAgent   String?
+  device      String?
+}
+
+model ClientPortalConfig {
+  id                  String    @id @default(cuid())
+  clientId            String    @unique
+  client              Client    @relation(fields: [clientId], references: [id])
+  ativo               Boolean   @default(false)
+  slug                String    @unique
+  logoUrl             String?
+  corDestaque         String?
+  mensagemBoasVindas  String?
+  mostrarAprovacoes   Boolean   @default(true)
+  mostrarMateriais    Boolean   @default(true)
+  mostrarRelatorios   Boolean   @default(true)
+  mostrarSolicitacoes Boolean   @default(true)
+  mostrarFinanceiro   Boolean   @default(false)
+  webhookUrl          String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model ClientMaterial {
+  id          String                   @id @default(cuid())
+  clientId    String
+  client      Client                   @relation(fields: [clientId], references: [id])
+  nome        String
+  descricao   String?
+  categoria   String
+  fileUrl     String
+  fileType    String
+  fileSize    Int
+  isNew       Boolean                  @default(true)
+  uploadedBy  String
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  deletedAt   DateTime?
+  downloads   ClientMaterialDownload[]
+}
+
+model ClientMaterialDownload {
+  id          String          @id @default(cuid())
+  materialId  String
+  material    ClientMaterial  @relation(fields: [materialId], references: [id])
+  memberId    String
+  member      ClientMember    @relation(fields: [memberId], references: [id])
+  downloadedAt DateTime       @default(now())
+}
+
+model ClientSolicitacao {
+  id           String                       @id @default(cuid())
+  clientId     String
+  client       Client                       @relation(fields: [clientId], references: [id])
+  memberId     String
+  member       ClientMember                 @relation(fields: [memberId], references: [id])
+  titulo       String
+  descricao    String
+  tipo         String
+  prioridade   String                       @default("normal")
+  status       String                       @default("aberta")
+  slaHoras     Int?
+  avaliacao    Int?
+  anexos       ClientSolicitacaoAnexo[]
+  comentarios  ClientSolicitacaoComentario[]
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+  deletedAt    DateTime?
+}
+
+model ClientSolicitacaoAnexo {
+  id             String             @id @default(cuid())
+  solicitacaoId  String
+  solicitacao    ClientSolicitacao  @relation(fields: [solicitacaoId], references: [id])
+  fileUrl        String
+  fileName       String
+  fileSize       Int
+  createdAt      DateTime           @default(now())
+}
+
+model ClientSolicitacaoComentario {
+  id             String             @id @default(cuid())
+  solicitacaoId  String
+  solicitacao    ClientSolicitacao  @relation(fields: [solicitacaoId], references: [id])
+  autorId        String
+  autorTipo      String
+  conteudo       String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model ClientRelatorio {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id])
+  titulo      String
+  descricao   String?
+  periodo     String
+  fileUrl     String
+  uploadedBy  String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+// ==========================================
+// 🆕 MÓDULO OPERAÇÕES — COLABORADORES
+// ==========================================
+
+model Collaborator {
+  id                  String                    @id @default(cuid())
+  userId              String?
+  nome                String
+  cpf                 String?                   @unique
+  dataNascimento      DateTime?
+  emailPessoal        String?
+  emailProfissional   String
+  telefone            String?
+  whatsapp            String?
+  avatarUrl           String?
+  linkedin            String?
+  portfolio           String?
+  cep                 String?
+  logradouro          String?
+  numero              String?
+  complemento         String?
+  bairro              String?
+  cidade              String?
+  estado              String?
+  genero              String?
+  contatoEmergencia   String?
+  telefoneEmergencia  String?
+  cargo               String
+  departamento        String
+  vinculo             String
+  senioridade         String
+  especialidades      String[]
+  bio                 String?
+  cargaHoraria        Int                       @default(40)
+  horarioInicio       String?
+  horarioFim          String?
+  diasTrabalho        String[]
+  dataEntrada         DateTime
+  dataSaida           DateTime?
+  ativo               Boolean                   @default(true)
+  recebeTasksSistema  Boolean                   @default(true)
+  podeSerAlocado      Boolean                   @default(true)
+  role                String                    @default("criativo")
+  codigoExterno       String?
+  observacoes         String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  deletedAt           DateTime?
+  
+  financeiro          CollaboratorFinanceiro?
+  documentos          CollaboratorDocumento[]
+  ausencias           CollaboratorAusencia[]
+  avaliacoes          CollaboratorAvaliacao[]
+  alocacoes           CollaboratorAlocacao[]
+  onboarding          CollaboratorOnboarding?
+  accessLogs          CollaboratorAccessLog[]
+  pagamentos          CollaboratorPagamento[]
+}
+
+model CollaboratorFinanceiro {
+  id                String        @id @default(cuid())
+  collaboratorId    String        @unique
+  collaborator      Collaborator  @relation(fields: [collaboratorId], references: [id])
+  tipoRemuneracao   String
+  salarioMensal     Float?
+  valorHora         Float?
+  chavePix          String?
+  banco             String?
+  agencia           String?
+  conta             String?
+  cnpjPj            String?
+  beneficios        String[]
+  observacoes       String?
+
+  // Integração Asaas
+  asaasWalletId     String?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model CollaboratorDocumento {
+  id              String        @id @default(cuid())
+  collaboratorId  String
+  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id])
+  nome            String
+  categoria       String
+  fileUrl         String
+  fileType    String
+  fileSize    Int
+  dataValidade    DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+}
+
+model CollaboratorAusencia {
+  id              String        @id @default(cuid())
+  collaboratorId  String
+  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id])
+  tipo            String
+  dataInicio      DateTime
+  dataFim         DateTime
+  motivo          String?
+  status          String        @default("pendente")
+  aprovadoPor     String?
+  aprovadoEm      DateTime?
+  observacoes     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model CollaboratorAvaliacao {
+  id              String        @id @default(cuid())
+  collaboratorId  String
+  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id])
+  avaliadorId     String
+  tipo            String
+  periodo         String
+  notaGeral       Int
+  pontosFortes    String?
+  melhorias       String?
+  metas           String?
+  observacoes     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model CollaboratorAlocacao {
+  id              String        @id @default(cuid())
+  collaboratorId  String
+  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id])
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id])
+  horasSemanais   Int
+  dataInicio      DateTime
+  dataFim         DateTime?
+  justificativa   String?
+  ativo           Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model CollaboratorOnboarding {
+  id              String                       @id @default(cuid())
+  collaboratorId  String                       @unique
+  collaborator    Collaborator                 @relation(fields: [collaboratorId], references: [id])
+  prazo           DateTime?
+  concluido       Boolean                      @default(false)
+  concluidoEm     DateTime?
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  tarefas         CollaboratorOnboardingTask[]
+}
+
+model CollaboratorOnboardingTask {
+  id            String                   @id @default(cuid())
+  onboardingId  String
+  onboarding    CollaboratorOnboarding   @relation(fields: [onboardingId], references: [id])
+  titulo        String
+  descricao     String?
+  concluida     Boolean                  @default(false)
+  concluidaEm  DateTime?
+  ordem         Int
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+}
+
+model CollaboratorAccessLog {
+  id              String        @id @default(cuid())
+  collaboratorId  String
+  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id])
+  accessedAt      DateTime      @default(now())
+  ipAddress       String?
+  userAgent       String?
+  device      String?
+}
+
+model CollaboratorPagamento {
+  id              String        @id @default(cuid())
+  collaboratorId  String
+  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id])
+  descricao       String
+  valor           Float
+  tipo            String
+  dataPagamento   DateTime
+  status          String        @default("pendente")
+  comprovante     String?
+  observacoes     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+// ==========================================
+// 🆕 EXPANSÃO 1 — INTEGRAÇÃO NATIVA ASAAS
+// ==========================================
+
+model AsaasConfig {
+  id                  String    @id @default(cuid())
+  apiKeyEncrypted     String
+  environment         String    @default("sandbox")
+  webhookToken        String
+  syncClientes        Boolean   @default(true)
+  syncCobr            Boolean   @default(true)
+  syncWebhook         Boolean   @default(true)
+  contaNome           String?
+  contaCnpj           String?
+  contaSaldo          Float?
+  contaSaldoAt        DateTime?
+  ativo               Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model AsaasWebhookConfig {
+  id              String    @id @default(cuid())
+  nome            String
+  url             String
+  email           String?
+  apiVersion      String    @default("v3")
+  authToken       String
+  active          Boolean   @default(true)
+  syncQueue       Boolean   @default(true)
+  events          String[]  // Array de eventos selecionados
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model AsaasWebhookLog {
+  id          String    @id @default(cuid())
+  evento      String
+  payload     Json
+  processado  Boolean   @default(false)
+  erro        String?
+  createdAt   DateTime  @default(now())
+}
+
+model AsaasApiLog {
+  id          String    @id @default(cuid())
+  metodo      String
+  endpoint    String
+  statusCode  Int
+  duracao     Int
+  erro        String?
+  createdAt   DateTime  @default(now())
+}
+
+model Invoice {
+  id                  String    @id @default(cuid())
+  clientId            String
+  client              Client    @relation(fields: [clientId], references: [id])
+  valor               Float
+  vencimento          DateTime
+  descricao           String?
+  status              String    @default("pendente")
+  
+  // Integração Asaas
+  asaasPaymentId      String?
+  asaasInvoiceUrl     String?
+  asaasBankSlipUrl    String?
+  asaasPixQrCode      String?
+  asaasPixCopiaECola String?
+  asaasStatus         String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+}
+
+model Recurrence {
+  id                  String    @id @default(cuid())
+  clientId            String
+  client              Client    @relation(fields: [clientId], references: [id])
+  valor               Float
+  ciclo               String    @default("MONTHLY")
+  proximoVencimento   DateTime
+  descricao           String?
+  ativo               Boolean   @default(true)
+
+  // Integração Asaas
+  asaasSubscriptionId String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+}
+
+// ==========================================
+// 🔐 EXPANSÃO 2 — SEGURANÇA E AUDITORIA
+// ==========================================
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  userId        String?
+  userEmail     String?
+  userRole      String?
+  ipAddress     String?
+  userAgent     String?
+  sessionId     String?
+  acao          String
+  recurso       String
+  recursoId     String?
+  dadosAntes    Json?
+  dadosDepois   Json?
+  statusHttp    Int?
+  sucesso       Boolean
+  motivo        String?
+  risco         String    @default("baixo")
+  createdAt     DateTime  @default(now())
+}
+
+model IntegrationSecurityLog {
+  id            String    @id @default(cuid())
+  integracao    String
+  evento        String
+  ipOrigem      String?
+  payload       Json?
+  valido        Boolean
+  motivo        String?
+  createdAt     DateTime  @default(now())
+}
+
+// ==========================================
+// 📱 EXPANSÃO 3 — WHATSAPP + RD STATION
+// ==========================================
+
+model WhatsappConfig {
+  id                  String    @id @default(cuid())
+  modalidade          String    @default("evolution")
+  evolutionUrl        String?
+  evolutionApiKey     String?
+  evolutionInstance   String?
+  metaPhoneNumberId   String?
+  metaWabaId          String?
+  metaAccessToken     String?
+  metaWebhookToken    String?
+  numeroDisplay       String?
+  horarioInicio       String?   @default("08:00")
+  horarioFim          String?   @default("20:00")
+  apenasUteis         Boolean   @default(true)
+  assinatura          String?
+  ativo               Boolean   @default(false)
+  notifAprovacao      Boolean   @default(true)
+  notifFatura         Boolean   @default(true)
+  notifPagamento      Boolean   @default(true)
+  notifLembrete       Boolean   @default(true)
+  notifPortal         Boolean   @default(true)
+  notifEquipe         Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model WhatsappTemplate {
+  id          String    @id @default(cuid())
+  nome        String
+  categoria   String
+  conteudo    String
+  variaveis   String[]
+  ativo       Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model WhatsappLog {
+  id            String    @id @default(cuid())
+  clientId      String?
+  memberId      String?
+  telefone      String
+  templateId    String?
+  conteudo      String
+  tipo          String
+  status        String    @default("enviada")
+  erro          String?
+  metaMessageId String?
+  enviadaEm     DateTime  @default(now())
+  entregueEm    DateTime?
+  lidaEm        DateTime?
+}
+
+model RdStationConfig {
+  id                String    @id @default(cuid())
+  clientId          String?
+  clientSecret      String?
+  accessToken       String?
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+  contaNome         String?
+  tipo              String    @default("ambos")
+  syncContatos      Boolean   @default(true)
+  syncFunil         Boolean   @default(true)
+  mapeamentoFunil   Json?
+  mapeamentoCampos  Json?
+  webhookToken      String?
+  ativo             Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model RdStationWebhookLog {
+  id          String    @id @default(cuid())
+  tipo        String
+  payload     Json
+  processado  Boolean   @default(false)
+  erro        String?
+  leadEmail   String?
+  createdAt   DateTime  @default(now())
+}
+
+model RdStationLead {
+  id            String    @id @default(cuid())
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id])
+  rdContactId   String?
+  email         String
+  nome          String?
+  telefone      String?
+  empresa       String?
+  cargo         String?
+  origem        String?
+  tags          String[]
+  estagio       String?
+  convertidoEm  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}

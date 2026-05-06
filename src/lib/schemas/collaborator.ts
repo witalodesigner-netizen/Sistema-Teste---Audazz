@@ -1,0 +1,74 @@
+import { z } from "zod"
+
+// ETAPA 1: Dados Pessoais
+export const collaboratorPersonalSchema = z.object({
+  avatarUrl: z.string().optional(),
+  nome: z.string().min(3, "Nome completo é obrigatório"),
+  cpf: z.string().min(11, "CPF inválido").max(14),
+  dataNascimento: z.date({ required_error: "Data de nascimento é obrigatória" }),
+  emailPessoal: z.string().email("E-mail pessoal inválido").optional().or(z.literal("")),
+  emailProfissional: z.string().email("E-mail profissional inválido"),
+  telefone: z.string().min(10, "Telefone inválido"),
+  whatsapp: z.string().optional(),
+  cep: z.string().min(8, "CEP inválido"),
+  logradouro: z.string().min(1, "Logradouro é obrigatório"),
+  numero: z.string().min(1, "Número é obrigatório"),
+  complemento: z.string().optional(),
+  bairro: z.string().min(1, "Bairro é obrigatório"),
+  cidade: z.string().min(1, "Cidade é obrigatória"),
+  estado: z.string().length(2, "Estado (UF) inválido"),
+  genero: z.string().optional(),
+  contatoEmergencia: z.string().min(1, "Nome de contato é obrigatório"),
+  telefoneEmergencia: z.string().min(10, "Telefone de emergência inválido"),
+})
+
+// ETAPA 2: Dados Profissionais
+export const collaboratorProfessionalSchema = z.object({
+  cargo: z.string().min(1, "Cargo é obrigatório"),
+  departamento: z.enum(["Design", "Tráfego Pago", "Social Media", "Desenvolvimento", "Gestão de Projetos", "Atendimento", "Financeiro", "Outro"]),
+  vinculo: z.enum(["CLT", "PJ", "Freelancer", "Estágio", "Sócio"]),
+  senioridade: z.enum(["Júnior", "Pleno", "Sênior", "Especialista", "Líder"]),
+  dataEntrada: z.date({ required_error: "Data de entrada é obrigatória" }),
+  cargaHoraria: z.number().min(1).max(168),
+  horarioInicio: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm"),
+  horarioFim: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm"),
+  diasTrabalho: z.array(z.string()).min(1, "Selecione pelo menos um dia"),
+  especialidades: z.array(z.string()),
+  bio: z.string().max(1000).optional(),
+})
+
+// ETAPA 3: Dados Financeiros
+export const collaboratorFinancialSchema = z.object({
+  tipoRemuneracao: z.enum(["Salário fixo", "Por hora", "Por projeto", "Misto"]),
+  salarioMensal: z.number().optional(),
+  valorHora: z.number().optional(),
+  chavePix: z.string().optional(),
+  banco: z.string().optional(),
+  agencia: z.string().optional(),
+  conta: z.string().optional(),
+  cnpjPj: z.string().optional(),
+  beneficios: z.array(z.string()),
+  observacoes: z.string().optional(),
+})
+
+// ETAPA 4: Acesso
+export const collaboratorAccessSchema = z.object({
+  role: z.enum(["admin", "gestor", "criativo"]),
+  podeSerAlocado: z.boolean().default(true),
+  recebeTasksSistema: z.boolean().default(true),
+  ativo: z.boolean().default(true),
+})
+
+// Schema Completo (Wizard)
+export const collaboratorFullSchema = z.object({
+  ...collaboratorPersonalSchema.shape,
+  ...collaboratorProfessionalSchema.shape,
+  ...collaboratorFinancialSchema.shape,
+  ...collaboratorAccessSchema.shape,
+})
+
+export type CollaboratorPersonalValues = z.infer<typeof collaboratorPersonalSchema>
+export type CollaboratorProfessionalValues = z.infer<typeof collaboratorProfessionalSchema>
+export type CollaboratorFinancialValues = z.infer<typeof collaboratorFinancialSchema>
+export type CollaboratorAccessValues = z.infer<typeof collaboratorAccessSchema>
+export type CollaboratorFullValues = z.infer<typeof collaboratorFullSchema>
