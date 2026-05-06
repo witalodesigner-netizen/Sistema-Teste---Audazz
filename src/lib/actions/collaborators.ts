@@ -86,3 +86,61 @@ export async function upsertCollaboratorAction(data: z.infer<typeof Collaborator
     return { success: false, error: error.message }
   }
 }
+
+/**
+ * Registra uma ausncia para o colaborador.
+ */
+export async function registerAbsenceAction(collaboratorId: string, data: any) {
+  const { userId } = await auth()
+  if (!userId) return { success: false, error: 'No autorizado' }
+
+  try {
+    const agencyId = "audazz-nexus"
+    const absenceRef = adminDb
+      .collection('agencies')
+      .doc(agencyId)
+      .collection('collaborators')
+      .doc(collaboratorId)
+      .collection('absences')
+      .doc()
+
+    await absenceRef.set({
+      ...data,
+      createdAt: FieldValue.serverTimestamp()
+    })
+
+    revalidatePath('/colaboradores')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Aloca um colaborador a um projeto.
+ */
+export async function allocateProjectAction(collaboratorId: string, data: any) {
+  const { userId } = await auth()
+  if (!userId) return { success: false, error: 'No autorizado' }
+
+  try {
+    const agencyId = "audazz-nexus"
+    const allocationRef = adminDb
+      .collection('agencies')
+      .doc(agencyId)
+      .collection('collaborators')
+      .doc(collaboratorId)
+      .collection('allocations')
+      .doc()
+
+    await allocationRef.set({
+      ...data,
+      allocatedAt: FieldValue.serverTimestamp()
+    })
+
+    revalidatePath('/colaboradores')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
