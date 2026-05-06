@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { usePathname, useParams } from "next/navigation"
 import Link from "next/link"
 import { motion } from "framer-motion"
 
-export default function CollaboratorDetailPage({ params }: { params: { id: string } }) {
+export default function CollaboratorDetailPage() {
+  const params = useParams()
+  const id = params.id as string
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-4">

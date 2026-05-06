@@ -2,7 +2,8 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { AppSidebar } from "@/components/layout/AppSidebar"
 import { Header } from "@/components/layout/Header"
 
-export default function Page({ params }: { params: { slug: string } }) {
+export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   // Extracting the name from the path if possible, but for simplicity:
   return (
     <SidebarProvider>

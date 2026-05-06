@@ -2,15 +2,16 @@
 
 import { ReactNode } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useParams } from "next/navigation"
 import { LayoutDashboard, CheckSquare, Library, MessageSquare, LogOut, Bell, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { motion } from "framer-motion"
 
-export default function PortalLayout({ children, params }: { children: ReactNode, params: { clienteSlug: string } }) {
+export default function PortalLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const slug = params.clienteSlug
+  const params = useParams()
+  const slug = params.clienteSlug as string
 
   const menuItems = [
     { label: "Início", href: `/portal/${slug}`, icon: LayoutDashboard },
