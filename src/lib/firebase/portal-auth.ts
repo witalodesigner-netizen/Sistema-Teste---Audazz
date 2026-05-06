@@ -1,0 +1,77 @@
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged,
+  getIdToken,
+  User as FirebaseUser
+} from 'firebase/auth'
+import { auth } from './client'
+
+/**
+ * Realiza o login do membro no Portal do Cliente via Firebase Auth.
+ * 
+ * @param email Email do membro
+ * @param password Senha
+ * @param clienteSlug Opcional - pode ser usado para validar se o membro pertence ao portal correto
+ */
+export async function signInMember(email: string, password: string, clienteSlug?: string) {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password)
+    
+    // Podemos realizar uma validao extra aqui via slug se necessrio
+    return { success: true, user: userCredential.user }
+  } catch (error: any) {
+    console.error("Erro no login do portal:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Encerra a sesso do membro no portal.
+ */
+export async function signOutMember() {
+  await signOut(auth)
+}
+
+/**
+ * Hook/Listener para monitorar o estado da autenticao no browser.
+ */
+export function onMemberStateChange(callback: (user: FirebaseUser | null) => void) {
+  return onAuthStateChanged(auth, callback)
+}
+
+/**
+ * Recupera o token de ID atual do membro, forando a atualizao se necessrio.
+ * til para enviar nos headers de requisies API.
+ */
+export async function getMemberToken(forceRefresh = false) {
+  if (auth.currentUser) {
+    return await getIdToken(auth.currentUser, forceRefresh)
+  }
+  return null
+}
+
+/**
+ * Lado do Servidor: Valida o token do portal e extrai os Custom Claims.
+ * Esta funo deve ser chamada APENAS em Server Components ou API Routes.
+ */
+export async function validatePortalToken(idToken: string) {
+  // Importao dinmica do Admin para evitar erro de bundle no client-side
+  const { adminAuth } = await import('./admin')
+  
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(idToken)
+    
+    return {
+      uid: decodedToken.uid,
+      agencyId: decodedToken.agencyId,
+      clientId: decodedToken.clientId,
+      memberId: decodedToken.memberId,
+      role: decodedToken.role,
+      isValid: true
+    }
+  } catch (error) {
+    console.error("Token do portal invlido:", error)
+    return { isValid: false }
+  }
+}

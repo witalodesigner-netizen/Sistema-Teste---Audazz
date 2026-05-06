@@ -1,90 +1,88 @@
-"use server"
+'use server'
 
-import { db } from "@/lib/db"
-import { revalidatePath } from "next/cache"
+import { adminDb } from '@/lib/firebase/admin'
+import { logAudit } from '@/lib/security/audit'
+import { encrypt } from '@/lib/security/crypto'
+import { revalidatePath } from 'next/cache'
+import { auth, currentUser } from '@clerk/nextjs/server'
+import { z } from 'zod'
+import { FieldValue } from 'firebase-admin/firestore'
 
-export async function createCollaborator(data: any) {
-  try {
-    const { financeiro, ...rest } = data
-    
-    const collaborator = await db.collaborator.create({
-      data: {
-        ...rest,
-        financeiro: {
-          create: financeiro
-        },
-        onboarding: {
-          create: {
-            tarefas: {
-              create: [
-                { titulo: "Enviar documentos", ordem: 1 },
-                { titulo: "Assinar contrato", ordem: 2 },
-                { titulo: "Configurar ferramentas", ordem: 3 }
-              ]
-            }
-          }
-        }
-      }
-    })
+/**
+ * Esquema de validao para colaboradores.
+ * Inclui campos sensveis que sero criptografados antes da persistncia.
+ */
+const CollaboratorSchema = z.object({
+  agencyId: z.string().min(1),
+  userId: z.string().min(1), // ID do Clerk para sincronizao
+  name: z.string().min(2),
+  emailProfissional: z.string().email(),
+  cargo: z.string().min(1),
+  departamento: z.string().min(1),
+  telefone: z.string().optional(),
+  cpf: z.string().optional(),
+  salarioMensal: z.number().optional(),
+  valorHora: z.number().optional(),
+  chavePix: z.string().optional()
+})
 
-    revalidatePath("/operacoes/colaboradores")
-    return { success: true, data: collaborator }
-  } catch (error) {
-    console.error("Error creating collaborator:", error)
-    return { success: false, error: "Falha ao cadastrar colaborador" }
+/**
+ * Cria ou atualiza um colaborador com criptografia AES-256-GCM nos dados sensveis.
+ */
+export async function upsertCollaboratorAction(data: z.infer<typeof CollaboratorSchema>) {
+  const { userId: adminId } = await auth()
+  const adminUser = await currentUser()
+  
+  if (!adminId || !adminUser) {
+    return { success: false, error: 'No autorizado' }
   }
-}
 
-export async function updateCollaborator(id: string, data: any) {
   try {
-    const { financeiro, ...rest } = data
+    const validated = CollaboratorSchema.parse(data)
+    const collabRef = adminDb.collection('agencies').doc(validated.agencyId).collection('collaborators').doc(validated.userId)
 
-    await db.collaborator.update({
-      where: { id },
-      data: {
-        ...rest,
-        financeiro: {
-          update: financeiro
-        }
-      }
+    const docData: any = {
+      agencyId: validated.agencyId,
+      userId: validated.userId,
+      name: validated.name,
+      emailProfissional: validated.emailProfissional,
+      cargo: validated.cargo,
+      departamento: validated.departamento,
+      telefone: validated.telefone || null,
+      ativo: true,
+      updatedAt: FieldValue.serverTimestamp()
+    }
+
+    // Criptografia de dados sensveis (apenas se fornecidos)
+    if (validated.cpf) docData.cpfEncrypted = encrypt(validated.cpf)
+    if (validated.salarioMensal) docData.salarioMensalEncrypted = encrypt(validated.salarioMensal.toString())
+    if (validated.valorHora) docData.valorHoraEncrypted = encrypt(validated.valorHora.toString())
+    if (validated.chavePix) docData.chavePixEncrypted = encrypt(validated.chavePix)
+
+    // Se for novo, adiciona data de criao
+    const snapshot = await collabRef.get()
+    if (!snapshot.exists()) {
+      docData.createdAt = FieldValue.serverTimestamp()
+      docData.deletedAt = null
+    }
+
+    await collabRef.set(docData, { merge: true })
+
+    await logAudit({
+      agencyId: validated.agencyId,
+      userId: adminId,
+      userEmail: adminUser.emailAddresses[0].emailAddress,
+      userRole: 'admin',
+      acao: snapshot.exists() ? 'UPDATE' : 'CREATE',
+      recurso: 'COLLABORATOR',
+      recursoId: validated.userId,
+      sucesso: true
     })
 
-    revalidatePath(`/operacoes/colaboradores/${id}`)
+    revalidatePath('/colaboradores')
     return { success: true }
-  } catch (error) {
-    return { success: false, error: "Falha ao atualizar colaborador" }
-  }
-}
-
-export async function registerAbsence(collaboratorId: string, data: any) {
-  try {
-    await db.collaboratorAusencia.create({
-      data: {
-        ...data,
-        collaboratorId,
-        status: "pendente"
-      }
-    })
-
-    revalidatePath(`/operacoes/colaboradores/${collaboratorId}`)
-    return { success: true }
-  } catch (error) {
-    return { success: false, error: "Falha ao registrar ausência" }
-  }
-}
-
-export async function allocateProject(collaboratorId: string, data: any) {
-  try {
-    await db.collaboratorAlocacao.create({
-      data: {
-        ...data,
-        collaboratorId
-      }
-    })
-
-    revalidatePath(`/operacoes/colaboradores/${collaboratorId}`)
-    return { success: true }
-  } catch (error) {
-    return { success: false, error: "Falha ao alocar projeto" }
+  } catch (error: any) {
+    console.error("Erro na Action Collaborator:", error)
+    return { success: false, error: error.message }
   }
 }

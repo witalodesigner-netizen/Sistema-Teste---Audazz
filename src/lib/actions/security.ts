@@ -1,20 +1,19 @@
 "use server"
 
-import { prisma } from "@/lib/db";
+import { adminDb } from "@/lib/firebase/admin";
 import { revalidatePath } from "next/cache";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { withAudit } from "@/lib/security/audit";
 import { checkPermission } from "@/lib/security/permissions";
 
-/**
- * Server Actions - Segurança e Auditoria
- */
+const AGENCY_ID = "audazz-nexus";
 
 /**
- * Encerra uma sessão específica do Clerk
+ * Server Actions - Segurana e Auditoria no Firestore
  */
+
 export const terminateSession = withAudit(
-  "Encerrar Sessão",
+  "Encerrar Sesso",
   "Security",
   async (sessionId: string) => {
     await checkPermission("seguranca", "manage");
@@ -28,7 +27,7 @@ export const terminateSession = withAudit(
 );
 
 /**
- * Busca logs de auditoria com filtros
+ * Busca logs de auditoria no Firestore
  */
 export async function getAuditLogs(filters: {
   userId?: string;
@@ -38,38 +37,29 @@ export async function getAuditLogs(filters: {
 }) {
   await checkPermission("seguranca", "read");
 
-  const where: any = {};
-  if (filters.userId) where.userId = filters.userId;
-  if (filters.acao) where.acao = { contains: filters.acao, mode: 'insensitive' };
-  if (filters.risco) where.risco = filters.risco;
+  let query: any = adminDb.collection('agencies').doc(AGENCY_ID).collection('auditLogs');
+
+  if (filters.userId) query = query.where('userId', '==', filters.userId);
+  if (filters.acao) query = query.where('acao', '==', filters.acao);
   if (filters.periodo) {
-    where.createdAt = {
-      gte: filters.periodo.from,
-      lte: filters.periodo.to,
-    };
+    query = query.where('createdAt', '>=', filters.periodo.from)
+                 .where('createdAt', '<=', filters.periodo.to);
   }
 
-  const logs = await prisma.auditLog.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  const snapshot = await query.orderBy('createdAt', 'desc').limit(100).get();
 
-  return logs;
+  return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 }
 
 /**
- * Ativa/Desativa MFA para o usuário atual
+ * Ativa/Desativa MFA para o usurio atual
  */
 export async function toggleMFA(enabled: boolean) {
   const { userId } = await auth();
-  if (!userId) throw new Error("Não autorizado.");
+  if (!userId) throw new Error("No autorizado.");
 
   const client = await clerkClient();
   
-  // No Clerk, o MFA é gerenciado pelo usuário no dashboard do Clerk, 
-  // mas aqui podemos disparar a configuração ou registrar a intenção.
-  // Para propósitos de sistema, vamos apenas registrar no metadata do usuário.
   await client.users.updateUserMetadata(userId, {
     publicMetadata: {
       mfaEnabled: enabled

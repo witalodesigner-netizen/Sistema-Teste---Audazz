@@ -1,0 +1,43 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper para verificar se o usurio est autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Regras para arquivos da agncia (Logos, Projetos, Documentos de Colaboradores)
+    match /agencies/{agencyId}/{allPaths=**} {
+      // Permite leitura se autenticado (o isolamento fino  feito via lgica de negcio/firestore)
+      allow read: if isAuthenticated();
+      
+      // Regras de escrita rigorosas
+      allow write: if isAuthenticated()
+        && request.resource.size < 50 * 1024 * 1024 // Limite de 50MB por arquivo
+        && (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType == 'application/pdf' ||
+          request.resource.contentType == 'video/mp4' ||
+          request.resource.contentType == 'video/quicktime' ||
+          request.resource.contentType.matches('application/vnd.*') || // Office/Google Docs
+          request.resource.contentType.matches('application/zip') ||
+          request.resource.contentType.matches('application/x-zip-compressed')
+        );
+      
+      // Permite excluso se autenticado
+      allow delete: if isAuthenticated();
+    }
+
+    // Regras para o Portal do Cliente (Arquivos pblicos/materiais com acesso controlado)
+    match /portal/{clienteSlug}/{allPaths=**} {
+      // Permite leitura se o usurio possuir o token ou estiver logado no portal
+      // Nota: Para segurana mxima, usamos URLs assinadas ou tokens de download
+      allow read: if true; 
+      
+      // Apenas a agncia (autenticada no dashboard) pode enviar arquivos para o portal
+      allow write: if isAuthenticated() && request.resource.size < 100 * 1024 * 1024;
+      allow delete: if isAuthenticated();
+    }
+  }
+}

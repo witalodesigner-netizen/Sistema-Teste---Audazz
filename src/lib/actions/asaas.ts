@@ -1,51 +1,47 @@
 "use server"
 
-import { prisma } from "@/lib/db";
+import { adminDb } from "@/lib/firebase/admin";
 import { revalidatePath } from "next/cache";
 import { AsaasService } from "@/lib/services/asaas";
 import { withAudit } from "@/lib/security/audit";
 import { checkPermission } from "@/lib/security/permissions";
+import { encrypt } from "@/lib/security/crypto";
+import { FieldValue } from "firebase-admin/firestore";
+
+const AGENCY_ID = "audazz-nexus";
 
 /**
- * Server Actions - Integração Asaas
- */
-
-/**
- * Salva ou atualiza a configuração do Asaas
+ * Salva ou atualiza a configurao do Asaas no Firestore
  */
 export const saveAsaasConfig = withAudit(
-  "Salvar Configuração",
+  "Salvar Configurao",
   "AsaasConfig",
   async (data: any) => {
     await checkPermission("configuracao", "manage");
 
-    const config = await prisma.asaasConfig.upsert({
-      where: { id: data.id || 'new' },
-      update: {
-        apiKeyEncrypted: data.apiKey, // No crypto module for now to keep it simple as per user schema
-        environment: data.environment,
-        webhookToken: data.webhookToken,
-        syncClientes: data.syncClientes,
-        syncCobr: data.syncCobr,
-        ativo: data.ativo,
-      },
-      create: {
-        apiKeyEncrypted: data.apiKey,
-        environment: data.environment,
-        webhookToken: data.webhookToken,
-        syncClientes: data.syncClientes,
-        syncCobr: data.syncCobr,
-        ativo: data.ativo,
-      }
-    });
+    const configRef = adminDb
+      .collection('agencies')
+      .doc(AGENCY_ID)
+      .collection('config')
+      .doc('asaas');
+
+    await configRef.set({
+      apiKeyEncrypted: data.apiKey ? encrypt(data.apiKey) : undefined,
+      environment: data.environment,
+      webhookToken: data.webhookToken,
+      syncClientes: data.syncClientes,
+      syncCobr: data.syncCobr,
+      ativo: data.ativo,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
 
     revalidatePath("/configuracoes/integracoes/asaas");
-    return { success: true, config };
+    return { success: true };
   }
 );
 
 /**
- * Testa a conexão com o Asaas
+ * Testa a conexo com o Asaas
  */
 export async function testAsaasConnection() {
   try {
@@ -53,13 +49,11 @@ export async function testAsaasConnection() {
     const asaas = await AsaasService.init();
     const balance = await asaas.getBalance();
     
-    // Atualiza info da conta no banco
-    await prisma.asaasConfig.updateMany({
-      where: { ativo: true },
-      data: {
-        contaSaldo: balance.balance,
-        contaSaldoAt: new Date()
-      }
+    // Atualiza info da conta no Firestore
+    const configRef = adminDb.collection('agencies').doc(AGENCY_ID).collection('config').doc('asaas');
+    await configRef.update({
+      contaSaldo: balance.balance,
+      contaSaldoAt: FieldValue.serverTimestamp()
     });
 
     return { success: true, balance: balance.balance };
@@ -67,84 +61,3 @@ export async function testAsaasConnection() {
     return { success: false, error: error.message };
   }
 }
-
-/**
- * Sincroniza um cliente com o Asaas
- */
-export async function syncClientWithAsaas(clientId: string) {
-  try {
-    await checkPermission("cliente", "update");
-    const client = await prisma.client.findUnique({ where: { id: clientId } });
-    if (!client) throw new Error("Cliente não encontrado.");
-
-    const asaas = await AsaasService.init();
-    
-    let asaasId = client.asaasCustomerId;
-
-    const customerData = {
-      name: client.name,
-      externalReference: client.id,
-      notificationDisabled: false,
-    };
-
-    if (asaasId) {
-      await asaas.updateCustomer(asaasId, customerData);
-    } else {
-      const newCustomer = await asaas.createCustomer(customerData);
-      asaasId = newCustomer.id;
-      await prisma.client.update({
-        where: { id: clientId },
-        data: { asaasCustomerId: asaasId }
-      });
-    }
-
-    revalidatePath(`/clients/${clientId}`);
-    return { success: true, asaasId };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Cria uma cobrança no Asaas
- */
-export const createAsaasPayment = withAudit(
-  "Criar Cobrança",
-  "Invoice",
-  async (invoiceId: string) => {
-    await checkPermission("financeiro", "create");
-    
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      include: { client: true }
-    });
-
-    if (!invoice || !invoice.client.asaasCustomerId) {
-      throw new Error("Fatura ou Cliente Asaas não encontrado.");
-    }
-
-    const asaas = await AsaasService.init();
-    
-    const payment = await asaas.createPayment({
-      customer: invoice.client.asaasCustomerId,
-      billingType: "UNDEFINED", // Permite ao cliente escolher
-      value: invoice.valor,
-      dueDate: invoice.vencimento.toISOString().split('T')[0],
-      description: invoice.descricao || `Fatura #${invoice.id}`,
-      externalReference: invoice.id,
-    });
-
-    await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        asaasPaymentId: payment.id,
-        asaasInvoiceUrl: payment.invoiceUrl,
-        asaasBankSlipUrl: payment.bankSlipUrl,
-        asaasStatus: payment.status
-      }
-    });
-
-    revalidatePath("/financeiro");
-    return { success: true, payment };
-  }
-);

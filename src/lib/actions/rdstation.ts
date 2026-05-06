@@ -1,26 +1,34 @@
 "use server"
 
-import { prisma } from "@/lib/db";
+import { adminDb } from "@/lib/firebase/admin";
 import { revalidatePath } from "next/cache";
 import { RdStationService } from "@/lib/services/rdstation";
 import { withAudit } from "@/lib/security/audit";
 import { checkPermission } from "@/lib/security/permissions";
+import { FieldValue } from "firebase-admin/firestore";
+
+const AGENCY_ID = "audazz-nexus";
 
 /**
- * Server Actions - RD Station
+ * Server Actions - RD Station no Firestore
  */
 
 export const saveRdStationConfig = withAudit(
-  "Salvar Configuração RD",
+  "Salvar Configurao RD",
   "RdStationConfig",
   async (data: any) => {
     await checkPermission("configuracao", "manage");
 
-    await prisma.rdStationConfig.upsert({
-      where: { id: data.id || 'new' },
-      update: data,
-      create: data
-    });
+    const configRef = adminDb
+      .collection('agencies')
+      .doc(AGENCY_ID)
+      .collection('config')
+      .doc('rdstation');
+
+    await configRef.set({
+      ...data,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
 
     revalidatePath("/configuracoes/integracoes/rdstation");
     return { success: true };
@@ -29,16 +37,21 @@ export const saveRdStationConfig = withAudit(
 
 /**
  * Sincroniza um cliente com o RD Station
+ * Adaptado para Firestore
  */
 export async function syncClientWithRd(clientId: string) {
   try {
     await checkPermission("cliente", "update");
-    const client = await prisma.client.findUnique({ where: { id: clientId } });
-    if (!client) throw new Error("Cliente não encontrado.");
+    
+    // Busca no Firestore
+    const clientDoc = await adminDb.collection('agencies').doc(AGENCY_ID).collection('clients').doc(clientId).get();
+    if (!clientDoc.exists) throw new Error("Cliente no encontrado.");
+    
+    const client = clientDoc.data()!;
 
     const rd = await RdStationService.init();
     
-    await rd.syncContact(client.slug, {
+    await rd.syncContact(client.slug || clientId, {
       name: client.name,
       job_title: "Cliente Nexus OS",
       lifecycle_stage: "Client",
@@ -51,7 +64,7 @@ export async function syncClientWithRd(clientId: string) {
 }
 
 /**
- * Dispara evento de conversão
+ * Dispara evento de converso
  */
 export async function triggerRdConversion(email: string, eventName: string, payload: any) {
   try {

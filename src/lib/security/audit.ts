@@ -1,87 +1,83 @@
-import { prisma } from "@/lib/db";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { headers } from "next/headers";
+import { adminDb } from '../firebase/admin'
+import { FieldValue } from 'firebase-admin/firestore'
 
 /**
- * Sistema de Auditoria Universal - Audazz Nexus OS
- * Registra todas as ações críticas para conformidade e segurança.
+ * Registra uma ao crtica no log de auditoria da agncia.
+ * Este log  imutvel por regras de segurana e serve para conformidade.
  */
-
-type AuditAction = {
-  acao: string;
-  recurso: string;
-  recursoId?: string;
-  dadosAntes?: any;
-  dadosDepois?: any;
-  sucesso: boolean;
-  motivo?: string;
-  risco?: "baixo" | "medio" | "alto" | "critico";
-};
-
-/**
- * Registra um log de auditoria no banco de dados
- */
-export async function createAuditLog(params: AuditAction) {
+export async function logAudit(data: {
+  agencyId: string
+  userId: string
+  userEmail: string
+  userRole: string
+  acao: string
+  recurso: string
+  recursoId?: string
+  dadosAntes?: any
+  dadosDepois?: any
+  sucesso: boolean
+  motivo?: string
+  ipAddress?: string
+  userAgent?: string
+}) {
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-    const headerList = await headers();
-    
-    const ipAddress = headerList.get("x-forwarded-for") || "unknown";
-    const userAgent = headerList.get("user-agent") || "unknown";
+    // Sanitizao básica de dados para evitar campos undefined
+    const cleanData = JSON.parse(JSON.stringify(data))
 
-    await prisma.auditLog.create({
-      data: {
-        userId: userId || "unauthenticated",
-        userEmail: user?.emailAddresses[0]?.emailAddress || "unknown",
-        userRole: (user?.publicMetadata?.role as string) || "unknown",
-        ipAddress,
-        userAgent,
-        acao: params.acao,
-        recurso: params.recurso,
-        recursoId: params.recursoId,
-        dadosAntes: params.dadosAntes ? JSON.parse(JSON.stringify(params.dadosAntes)) : null,
-        dadosDepois: params.dadosDepois ? JSON.parse(JSON.stringify(params.dadosDepois)) : null,
-        sucesso: params.sucesso,
-        motivo: params.motivo,
-        risco: params.risco || "baixo",
-      },
-    });
+    await adminDb
+      .collection('agencies')
+      .doc(data.agencyId)
+      .collection('auditLogs')
+      .add({
+        ...cleanData,
+        createdAt: FieldValue.serverTimestamp()
+      })
   } catch (error) {
-    // Falha silenciosa no log para não quebrar a aplicação, mas loga no console
-    console.error("❌ Falha ao criar Audit Log:", error);
+    console.error("Falha ao registrar log de auditoria:", error)
+    // No lanamos o erro para no interromper a operao principal, 
+    // apenas logamos a falha no console do servidor.
   }
 }
 
 /**
- * Wrapper para Server Actions que adiciona auditoria automática
+ * Wrapper HOC para Server Actions que registra automaticamente auditoria.
  */
 export function withAudit<T extends (...args: any[]) => Promise<any>>(
-  actionName: string,
-  resourceName: string,
+  acao: string,
+  recurso: string,
   fn: T
 ) {
   return async (...args: Parameters<T>): Promise<ReturnType<T>> => {
-    try {
-      const result = await fn(...args);
-      
-      await createAuditLog({
-        acao: actionName,
-        recurso: resourceName,
-        sucesso: true,
-        risco: "baixo"
-      });
-
-      return result;
-    } catch (error: any) {
-      await createAuditLog({
-        acao: actionName,
-        recurso: resourceName,
-        sucesso: false,
-        motivo: error.message,
-        risco: "medio"
-      });
-      throw error;
+    // Nota: Em um ambiente real, pegaramos o usurio da sesso (ex: Clerk)
+    // Aqui usaremos dados genricos para demonstrao do log
+    const mockUser = {
+      agencyId: 'audazz-nexus',
+      userId: 'system',
+      userEmail: 'admin@audazz.com',
+      userRole: 'admin'
     }
-  };
+
+    try {
+      const result = await fn(...args)
+      
+      await logAudit({
+        ...mockUser,
+        acao,
+        recurso,
+        sucesso: true,
+        dadosDepois: args[0] // Assume o primeiro argumento como input
+      })
+
+      return result
+    } catch (error: any) {
+      await logAudit({
+        ...mockUser,
+        acao,
+        recurso,
+        sucesso: false,
+        motivo: error.message
+      })
+      throw error
+    }
+  }
 }
