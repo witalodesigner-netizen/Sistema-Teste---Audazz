@@ -241,7 +241,7 @@ model Collaborator {
   cpf                 String?                   @unique
   dataNascimento      DateTime?
   emailPessoal        String?
-  emailProfissional   String
+  emailProfissional   String                    @unique
   telefone            String?
   whatsapp            String?
   avatarUrl           String?

@@ -5,14 +5,12 @@ export const clientMemberSchema = z.object({
   email: z.string().email("E-mail inválido"),
   jobTitle: z.string().min(1, "Cargo é obrigatório"),
   phone: z.string().optional(),
-  role: z.enum(["DONO", "GESTOR", "VISUALIZADOR"], {
-    required_error: "Selecione um nível de acesso",
-  }),
+  role: z.enum(["DONO", "GESTOR", "VISUALIZADOR"] as const),
 })
 
 export const inviteMemberSchema = z.object({
   email: z.string().email("E-mail inválido"),
-  role: z.enum(["DONO", "GESTOR", "VISUALIZADOR"]),
+  role: z.enum(["DONO", "GESTOR", "VISUALIZADOR"] as const),
 })
 
 export const memberPasswordSchema = z.object({

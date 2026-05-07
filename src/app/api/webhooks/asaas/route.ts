@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       where: { ativo: true }
     });
 
+    const asaasToken = headerList.get("asaas-access-token");
     if (!config || asaasToken !== config.webhookToken) {
       console.warn("⚠️ Tentativa de webhook Asaas com token inválido ou integração inativa.");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
       // Busca dados da fatura e cliente para as automações
       const invoice = await prisma.invoice.findUnique({
         where: { id: externalId },
-        include: { client: true }
+        include: { client: { include: { portalConfig: true } } }
       });
 
       if (invoice) {

@@ -27,7 +27,7 @@ export const solicitacaoSchema = z.object({
   titulo: z.string().min(5, "Título deve ser mais descritivo"),
   descricao: z.string().min(10, "Forneça mais detalhes na descrição"),
   tipo: z.string().min(1, "Selecione o tipo de solicitação"),
-  prioridade: z.enum(["baixa", "normal", "urgente"]),
+  prioridade: z.enum(["baixa", "normal", "urgente"] as const),
 })
 
 export type PortalConfigValues = z.infer<typeof portalConfigSchema>

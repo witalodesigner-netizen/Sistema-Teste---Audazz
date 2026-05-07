@@ -49,7 +49,7 @@ export function WeatherWidget() {
           temp: Math.round(current.temperature),
           condition: translateCondition(current.weathercode),
           icon: getWeatherIcon(current.weathercode),
-          city: finalCity.toUpperCase()
+          city: (finalCity || "Brasil").toUpperCase()
         })
       } catch (error) {
         console.error("Erro ao buscar clima", error)

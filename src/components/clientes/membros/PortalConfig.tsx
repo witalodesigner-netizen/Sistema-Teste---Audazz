@@ -21,13 +21,19 @@ export function PortalConfig({ clientId, initialConfig }: PortalConfigProps) {
   const { isLoading, handleUpdateConfig } = usePortal(clientId)
   
   const form = useForm<PortalConfigValues>({
-    resolver: zodResolver(portalConfigSchema),
-    defaultValues: initialConfig || {
-      ativo: false,
-      mostrarAprovacoes: true,
-      mostrarMateriais: true,
-      mostrarRelatorios: true,
-      mostrarSolicitacoes: true,
+    resolver: zodResolver(portalConfigSchema) as any,
+    defaultValues: {
+      ativo: Boolean(initialConfig?.ativo),
+      slug: String(initialConfig?.slug || ""),
+      logoUrl: String(initialConfig?.logoUrl || ""),
+      corDestaque: String(initialConfig?.corDestaque || "#0071E3"),
+      mensagemBoasVindas: String(initialConfig?.mensagemBoasVindas || ""),
+      mostrarAprovacoes: initialConfig?.mostrarAprovacoes !== false,
+      mostrarMateriais: initialConfig?.mostrarMateriais !== false,
+      mostrarRelatorios: initialConfig?.mostrarRelatorios !== false,
+      mostrarSolicitacoes: initialConfig?.mostrarSolicitacoes !== false,
+      mostrarFinanceiro: Boolean(initialConfig?.mostrarFinanceiro),
+      webhookUrl: String(initialConfig?.webhookUrl || ""),
     }
   })
 

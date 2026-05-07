@@ -79,8 +79,8 @@ export abstract class BaseRepository {
     const data = hasMore ? docs.slice(0, limitAmount) : docs
 
     return {
-      data: data.map(doc => ({ id: doc.id, ...doc.data() })) as T[],
-      lastDoc: data.length > 0 ? data[data.length - 1] : null,
+      data: data.map(doc => ({ id: doc.id, ...(doc.data() as any) })) as T[],
+      lastDoc: data.length > 0 ? data[data.length - 1] as any : null,
       hasMore
     }
   }

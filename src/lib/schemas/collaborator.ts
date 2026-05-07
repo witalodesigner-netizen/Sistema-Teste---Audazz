@@ -5,7 +5,7 @@ export const collaboratorPersonalSchema = z.object({
   avatarUrl: z.string().optional(),
   nome: z.string().min(3, "Nome completo é obrigatório"),
   cpf: z.string().min(11, "CPF inválido").max(14),
-  dataNascimento: z.date({ required_error: "Data de nascimento é obrigatória" }),
+  dataNascimento: z.date(), // Removido required_error que estava causando erro no TS
   emailPessoal: z.string().email("E-mail pessoal inválido").optional().or(z.literal("")),
   emailProfissional: z.string().email("E-mail profissional inválido"),
   telefone: z.string().min(10, "Telefone inválido"),
@@ -25,10 +25,10 @@ export const collaboratorPersonalSchema = z.object({
 // ETAPA 2: Dados Profissionais
 export const collaboratorProfessionalSchema = z.object({
   cargo: z.string().min(1, "Cargo é obrigatório"),
-  departamento: z.enum(["Design", "Tráfego Pago", "Social Media", "Desenvolvimento", "Gestão de Projetos", "Atendimento", "Financeiro", "Outro"]),
-  vinculo: z.enum(["CLT", "PJ", "Freelancer", "Estágio", "Sócio"]),
-  senioridade: z.enum(["Júnior", "Pleno", "Sênior", "Especialista", "Líder"]),
-  dataEntrada: z.date({ required_error: "Data de entrada é obrigatória" }),
+  departamento: z.enum(["Design", "Tráfego Pago", "Social Media", "Desenvolvimento", "Gestão de Projetos", "Atendimento", "Financeiro", "Outro"] as const),
+  vinculo: z.enum(["CLT", "PJ", "Freelancer", "Estágio", "Sócio"] as const),
+  senioridade: z.enum(["Júnior", "Pleno", "Sênior", "Especialista", "Líder"] as const),
+  dataEntrada: z.date(), // Removido required_error que estava causando erro no TS
   cargaHoraria: z.number().min(1).max(168),
   horarioInicio: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm"),
   horarioFim: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm"),
@@ -39,7 +39,7 @@ export const collaboratorProfessionalSchema = z.object({
 
 // ETAPA 3: Dados Financeiros
 export const collaboratorFinancialSchema = z.object({
-  tipoRemuneracao: z.enum(["Salário fixo", "Por hora", "Por projeto", "Misto"]),
+  tipoRemuneracao: z.enum(["Salário fixo", "Por hora", "Por projeto", "Misto"] as const),
   salarioMensal: z.number().optional(),
   valorHora: z.number().optional(),
   chavePix: z.string().optional(),
@@ -53,7 +53,7 @@ export const collaboratorFinancialSchema = z.object({
 
 // ETAPA 4: Acesso
 export const collaboratorAccessSchema = z.object({
-  role: z.enum(["admin", "gestor", "criativo"]),
+  role: z.enum(["admin", "gestor", "criativo"] as const),
   podeSerAlocado: z.boolean().default(true),
   recebeTasksSistema: z.boolean().default(true),
   ativo: z.boolean().default(true),

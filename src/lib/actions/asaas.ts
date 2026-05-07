@@ -61,3 +61,59 @@ export async function testAsaasConnection() {
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Cria uma cobrança no Asaas para uma fatura
+ */
+export const createAsaasPayment = withAudit(
+  "Gerar Cobrança Asaas",
+  "Invoice",
+  async (invoiceId: string) => {
+    await checkPermission("financeiro", "manage");
+
+    try {
+      // Busca a fatura no Firestore
+      const invoiceRef = adminDb
+        .collection('agencies')
+        .doc(AGENCY_ID)
+        .collection('invoices')
+        .doc(invoiceId);
+      
+      const invoiceDoc = await invoiceRef.get();
+      if (!invoiceDoc.exists) {
+        throw new Error("Fatura não encontrada");
+      }
+
+      const invoiceData = invoiceDoc.data() as any;
+
+      const asaas = await AsaasService.init();
+      
+      // Aqui integraria com o Asaas de fato
+      // Para o build passar, vamos simular a resposta ou chamar o service se ele estiver pronto
+      const paymentData = {
+        customer: invoiceData.asaasCustomerId, // Precisa ter o ID do cliente no Asaas
+        billingType: 'UNDEFINED',
+        value: invoiceData.value,
+        dueDate: invoiceData.dueDate.toDate().toISOString().split('T')[0],
+        description: invoiceData.description,
+        externalReference: invoiceId
+      };
+
+      const payment = await asaas.createPayment(paymentData);
+
+      // Atualiza a fatura com os dados do Asaas
+      await invoiceRef.update({
+        asaasPaymentId: payment.id,
+        asaasInvoiceUrl: payment.invoiceUrl,
+        asaasBankSlipUrl: payment.bankSlipUrl,
+        asaasStatus: payment.status,
+        updatedAt: FieldValue.serverTimestamp()
+      });
+
+      return { success: true, paymentId: payment.id };
+    } catch (error: any) {
+      console.error("Erro Asaas:", error);
+      throw error;
+    }
+  }
+);

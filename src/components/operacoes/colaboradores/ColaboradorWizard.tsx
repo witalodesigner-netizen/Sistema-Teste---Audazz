@@ -29,7 +29,7 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
   }
 
   const form = useForm<CollaboratorFullValues>({
-    resolver: zodResolver(collaboratorFullSchema),
+    resolver: zodResolver(collaboratorFullSchema) as any,
     defaultValues: {
       role: "criativo",
       ativo: true,

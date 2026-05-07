@@ -61,7 +61,7 @@ export async function upsertCollaboratorAction(data: z.infer<typeof Collaborator
 
     // Se for novo, adiciona data de criao
     const snapshot = await collabRef.get()
-    if (!snapshot.exists()) {
+    if (!snapshot.exists) {
       docData.createdAt = FieldValue.serverTimestamp()
       docData.deletedAt = null
     }
@@ -73,7 +73,7 @@ export async function upsertCollaboratorAction(data: z.infer<typeof Collaborator
       userId: adminId,
       userEmail: adminUser.emailAddresses[0].emailAddress,
       userRole: 'admin',
-      acao: snapshot.exists() ? 'UPDATE' : 'CREATE',
+      acao: snapshot.exists ? 'UPDATE' : 'CREATE',
       recurso: 'COLLABORATOR',
       recursoId: validated.userId,
       sucesso: true
