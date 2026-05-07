@@ -6,6 +6,26 @@ import {
   User as FirebaseUser
 } from 'firebase/auth'
 import { auth } from './client'
+import { mapCpfToEmail } from '../security/passwords'
+
+/**
+ * Realiza o login do membro no Portal do Cliente via CPF e Senha.
+ * O CPF  mapeado para o e-mail de autenticao do Firebase.
+ * 
+ * @param cpf CPF do membro (com ou sem formatao)
+ * @param password Senha gerada pelo sistema
+ */
+export async function signInWithCpf(cpf: string, password: string) {
+  try {
+    const virtualEmail = mapCpfToEmail(cpf)
+    
+    const userCredential = await signInWithEmailAndPassword(auth, virtualEmail, password)
+    return { success: true, user: userCredential.user }
+  } catch (error: any) {
+    console.error("Erro no login via CPF:", error)
+    return { success: false, error: error.code || error.message }
+  }
+}
 
 /**
  * Realiza o login do membro no Portal do Cliente via Firebase Auth.
