@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 const loginSchema = z.object({
-  cpf: z.string().min(11, 'CPF invlido').max(14),
+  cpf: z.string().min(11, 'CPF inválido').max(14),
   password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
 })
 
@@ -75,7 +75,7 @@ export function LoginForm() {
     } catch (err: any) {
       console.error('Login error:', err)
       if (err.message === 'auth/user-not-found' || err.message === 'auth/wrong-password' || err.message === 'auth/invalid-credential') {
-        setError('CPF ou senha invlidos. Verifique seus dados.')
+        setError('CPF ou senha inválidos. Verifique seus dados.')
       } else {
         setError('Ocorreu um erro ao realizar o login. Tente novamente.')
       }
@@ -187,7 +187,7 @@ export function LoginForm() {
 
         <div className="pt-4 text-center">
           <p className="text-xs text-muted-foreground">
-            Esqueceu sua senha ou no tem acesso? <br />
+            Esqueceu sua senha ou não tem acesso? <br />
             Entre em contato com o suporte da <span className="text-primary font-semibold">Audazz</span>.
           </p>
         </div>

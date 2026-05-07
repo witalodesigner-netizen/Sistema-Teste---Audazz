@@ -11,8 +11,11 @@ import {
   HelpCircle,
   ChevronRight,
   LogOut,
-  Palette
+  Palette,
+  Power
 } from "lucide-react"
+import { signOutMember } from "@/lib/firebase/portal-auth"
+import { useRouter } from "next/navigation"
 
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, SidebarGroup, SidebarGroupLabel } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -86,6 +89,19 @@ export function AppSidebar() {
   const [branding, setBranding] = React.useState({ lightLogo: "", darkLogo: "", systemName: "Audazz", slogan: "Gestão de Alta Performance" })
   const [user, setUser] = React.useState({ firstName: "Usuário", lastName: "Audazz", avatar: null as string | null })
   const { theme, resolvedTheme } = useTheme()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await signOutMember()
+      // Clear cookie
+      document.cookie = "portal-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
+      router.push('/login')
+      router.refresh()
+    } catch (error) {
+      console.error("Erro ao sair:", error)
+    }
+  }
 
   React.useEffect(() => {
     const loadData = async () => {
@@ -188,6 +204,19 @@ export function AppSidebar() {
                   <span className="text-[10px] text-muted-foreground truncate uppercase">Administrador</span>
                 </div>
               </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              size="lg" 
+              className="h-12 mt-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleLogout}
+            >
+              <Power className="w-5 h-5" />
+              <div className="flex flex-col items-start gap-0.5 truncate group-data-[collapsible=icon]:hidden">
+                <span className="text-sm font-bold">Encerrar Sessão</span>
+                <span className="text-[10px] opacity-70 uppercase">Sair do Sistema</span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

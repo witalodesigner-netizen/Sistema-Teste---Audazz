@@ -1,98 +1,154 @@
 'use server'
 
-import { adminDb } from '@/lib/firebase/admin'
+import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { encrypt } from '@/lib/security/crypto'
 import { revalidatePath } from 'next/cache'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
+import { mapCpfToEmail, generateSystemPassword } from '@/lib/security/passwords'
 
 /**
- * Esquema de validao para colaboradores.
- * Inclui campos sensveis que sero criptografados antes da persistncia.
+ * Cria um novo colaborador com acesso ao Portal (Firebase Auth)
+ * O ID de acesso  o CPF e a senha  gerada automaticamente.
  */
-const CollaboratorSchema = z.object({
-  agencyId: z.string().min(1),
-  userId: z.string().min(1), // ID do Clerk para sincronizao
-  name: z.string().min(2),
-  emailProfissional: z.string().email(),
-  cargo: z.string().min(1),
-  departamento: z.string().min(1),
-  telefone: z.string().optional(),
-  cpf: z.string().optional(),
-  salarioMensal: z.number().optional(),
-  valorHora: z.number().optional(),
-  chavePix: z.string().optional()
-})
-
-/**
- * Cria ou atualiza um colaborador com criptografia AES-256-GCM nos dados sensveis.
- */
-export async function upsertCollaboratorAction(data: z.infer<typeof CollaboratorSchema>) {
+export async function createCollaboratorAction(data: any) {
   const { userId: adminId } = await auth()
   const adminUser = await currentUser()
   
   if (!adminId || !adminUser) {
-    return { success: false, error: 'No autorizado' }
+    return { success: false, error: 'Não autorizado' }
   }
 
   try {
-    const validated = CollaboratorSchema.parse(data)
-    const collabRef = adminDb.collection('agencies').doc(validated.agencyId).collection('collaborators').doc(validated.userId)
+    const agencyId = "audazz-nexus" // Default agency for the system
+    const generatedPassword = generateSystemPassword()
+    const virtualEmail = mapCpfToEmail(data.cpf)
 
+    // 1. Cria o usuário no Firebase Auth para o Portal
+    const userRecord = await adminAuth.createUser({
+      email: virtualEmail,
+      password: generatedPassword,
+      displayName: data.nome,
+      phoneNumber: data.telefone ? `+55${data.telefone.replace(/\D/g, '')}` : undefined,
+    })
+
+    // 2. Define Custom Claims (Acesso Portal)
+    await adminAuth.setCustomUserClaims(userRecord.uid, {
+      agencyId,
+      role: data.role || 'criativo',
+      isCollaborator: true,
+      cpf: data.cpf.replace(/\D/g, '')
+    })
+
+    // 3. Dados para o Firestore
     const docData: any = {
-      agencyId: validated.agencyId,
-      userId: validated.userId,
-      name: validated.name,
-      emailProfissional: validated.emailProfissional,
-      cargo: validated.cargo,
-      departamento: validated.departamento,
-      telefone: validated.telefone || null,
+      uid: userRecord.uid,
+      agencyId,
+      name: data.nome,
+      emailPessoal: data.emailPessoal || null,
+      emailProfissional: data.emailProfissional,
+      telefone: data.telefone || null,
+      whatsapp: data.whatsapp || null,
+      cpf: data.cpf, // Mantemos o formatado para exibição
+      cargo: data.cargo,
+      departamento: data.departamento,
+      vinculo: data.vinculo || 'PJ',
+      senioridade: data.senioridade || 'Pleno',
+      dataEntrada: data.dataEntrada || new Date().toISOString(),
+      cargaHoraria: data.cargaHoraria || 40,
+      role: data.role || 'criativo',
       ativo: true,
-      updatedAt: FieldValue.serverTimestamp()
+      podeSerAlocado: data.podeSerAlocado ?? true,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      deletedAt: null
     }
 
-    // Criptografia de dados sensveis (apenas se fornecidos)
-    if (validated.cpf) docData.cpfEncrypted = encrypt(validated.cpf)
-    if (validated.salarioMensal) docData.salarioMensalEncrypted = encrypt(validated.salarioMensal.toString())
-    if (validated.valorHora) docData.valorHoraEncrypted = encrypt(validated.valorHora.toString())
-    if (validated.chavePix) docData.chavePixEncrypted = encrypt(validated.chavePix)
+    // Criptografia de dados sensíveis para o Firestore
+    if (data.cpf) docData.cpfEncrypted = encrypt(data.cpf.replace(/\D/g, ''))
+    if (data.salarioMensal) docData.salarioMensalEncrypted = encrypt(data.salarioMensal.toString())
+    if (data.chavePix) docData.chavePixEncrypted = encrypt(data.chavePix)
 
-    // Se for novo, adiciona data de criao
-    const snapshot = await collabRef.get()
-    if (!snapshot.exists) {
-      docData.createdAt = FieldValue.serverTimestamp()
-      docData.deletedAt = null
-    }
+    // 4. Salva no Firestore
+    const collabRef = adminDb
+      .collection('agencies')
+      .doc(agencyId)
+      .collection('collaborators')
+      .doc(userRecord.uid)
 
-    await collabRef.set(docData, { merge: true })
+    await collabRef.set(docData)
 
+    // 5. Log de Auditoria
     await logAudit({
-      agencyId: validated.agencyId,
+      agencyId,
       userId: adminId,
       userEmail: adminUser.emailAddresses[0].emailAddress,
       userRole: 'admin',
-      acao: snapshot.exists ? 'UPDATE' : 'CREATE',
+      acao: 'CREATE_COLLABORATOR',
       recurso: 'COLLABORATOR',
-      recursoId: validated.userId,
+      recursoId: userRecord.uid,
       sucesso: true
     })
 
     revalidatePath('/colaboradores')
-    return { success: true }
+    
+    return { 
+      success: true, 
+      uid: userRecord.uid, 
+      password: generatedPassword,
+      accessId: data.cpf
+    }
+
   } catch (error: any) {
-    console.error("Erro na Action Collaborator:", error)
+    console.error("Erro ao admitir colaborador:", error)
+    if (error.code === 'auth/email-already-exists') {
+      return { success: false, error: 'Este CPF já possui um acesso cadastrado.' }
+    }
     return { success: false, error: error.message }
   }
 }
 
 /**
- * Registra uma ausncia para o colaborador.
+ * Mantemos a função de upsert para compatibilidade ou atualizações simples via Clerk
+ */
+export async function upsertCollaboratorAction(data: any) {
+  const { userId: adminId } = await auth()
+  if (!adminId) return { success: false, error: 'Não autorizado' }
+
+  try {
+    const agencyId = data.agencyId || "audazz-nexus"
+    const userId = data.userId || data.uid
+
+    if (!userId) throw new Error("ID do usuário é obrigatório")
+
+    const collabRef = adminDb.collection('agencies').doc(agencyId).collection('collaborators').doc(userId)
+
+    const docData: any = {
+      ...data,
+      updatedAt: FieldValue.serverTimestamp()
+    }
+
+    // Se houver CPF, garante criptografia
+    if (data.cpf) docData.cpfEncrypted = encrypt(data.cpf.replace(/\D/g, ''))
+
+    await collabRef.set(docData, { merge: true })
+
+    revalidatePath('/colaboradores')
+    return { success: true }
+  } catch (error: any) {
+    console.error("Erro no upsert do colaborador:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Registra uma ausência para o colaborador.
  */
 export async function registerAbsenceAction(collaboratorId: string, data: any) {
   const { userId } = await auth()
-  if (!userId) return { success: false, error: 'No autorizado' }
+  if (!userId) return { success: false, error: 'Não autorizado' }
 
   try {
     const agencyId = "audazz-nexus"
@@ -121,7 +177,7 @@ export async function registerAbsenceAction(collaboratorId: string, data: any) {
  */
 export async function allocateProjectAction(collaboratorId: string, data: any) {
   const { userId } = await auth()
-  if (!userId) return { success: false, error: 'No autorizado' }
+  if (!userId) return { success: false, error: 'Não autorizado' }
 
   try {
     const agencyId = "audazz-nexus"
@@ -144,3 +200,4 @@ export async function allocateProjectAction(collaboratorId: string, data: any) {
     return { success: false, error: error.message }
   }
 }
+

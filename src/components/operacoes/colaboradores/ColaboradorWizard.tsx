@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { collaboratorFullSchema, CollaboratorFullValues } from "@/lib/schemas/collaborator"
 import { Button } from "@/components/ui/button"
@@ -10,13 +10,38 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
 import { useCollaborators } from "@/hooks/use-collaborators"
-import { Check, ChevronRight, ChevronLeft, Loader2, User, Briefcase, Wallet, ShieldCheck, UserPlus, Camera, Plus } from "lucide-react"
+import { Check, ChevronRight, ChevronLeft, Loader2, User, Briefcase, Wallet, ShieldCheck, UserPlus, Camera, Plus, Copy, CheckCircle2 } from "lucide-react"
+import { toast } from "sonner"
 
 export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState(1)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [createdData, setCreatedData] = useState<{ accessId: string, password: string } | null>(null)
   const { isLoading, handleCreate } = useCollaborators()
   
+  const form = useForm<CollaboratorFullValues>({
+    resolver: zodResolver(collaboratorFullSchema) as any,
+    defaultValues: {
+      role: "criativo",
+      ativo: true,
+      podeSerAlocado: true,
+      cargaHoraria: 40,
+      diasTrabalho: ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"],
+      vinculo: "PJ",
+      senioridade: "Pleno",
+      departamento: "Design",
+      tipoRemuneracao: "Salário fixo",
+      dataEntrada: new Date(),
+      dataNascimento: new Date(1995, 0, 1),
+      horarioInicio: "09:00",
+      horarioFim: "18:00",
+      especialidades: [],
+      beneficios: []
+    }
+  })
+
+  const { register, handleSubmit, control, formState: { errors } } = form
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -28,25 +53,22 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
     }
   }
 
-  const form = useForm<CollaboratorFullValues>({
-    resolver: zodResolver(collaboratorFullSchema) as any,
-    defaultValues: {
-      role: "criativo",
-      ativo: true,
-      podeSerAlocado: true,
-      cargaHoraria: 40,
-      diasTrabalho: ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"],
-    }
-  })
-
   const nextStep = () => setStep(s => Math.min(s + 1, 4))
   const prevStep = () => setStep(s => Math.max(s - 1, 1))
 
   const onSubmit = async (data: CollaboratorFullValues) => {
-    const result = await handleCreate(data)
-    if (result) {
-      onComplete()
+    const result: any = await handleCreate(data)
+    if (result && result.success) {
+      setCreatedData({
+        accessId: result.accessId,
+        password: result.password
+      })
     }
+  }
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success(`${label} copiado!`)
   }
 
   const steps = [
@@ -55,6 +77,56 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
     { id: 3, title: "Financeiro", icon: Wallet },
     { id: 4, title: "Acesso", icon: ShieldCheck },
   ]
+
+  if (createdData) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="p-12 text-center space-y-8"
+      >
+        <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+        </div>
+        
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Admissão Concluída!</h2>
+          <p className="text-muted-foreground mt-2">
+            O acesso ao Portal Audazz foi criado com sucesso.
+          </p>
+        </div>
+
+        <div className="bg-white/[0.03] border border-white/5 rounded-[2rem] p-6 space-y-4 max-w-sm mx-auto">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-widest text-muted-foreground">ID de Acesso (CPF)</Label>
+            <div className="flex items-center gap-2 bg-secondary/30 p-3 rounded-xl">
+              <code className="flex-1 text-lg font-mono">{createdData.accessId}</code>
+              <Button size="icon" variant="ghost" onClick={() => copyToClipboard(createdData.accessId, "CPF")}>
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-widest text-muted-foreground">Senha Provisória</Label>
+            <div className="flex items-center gap-2 bg-secondary/30 p-3 rounded-xl">
+              <code className="flex-1 text-lg font-mono">{createdData.password}</code>
+              <Button size="icon" variant="ghost" onClick={() => copyToClipboard(createdData.password, "Senha")}>
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Button 
+          onClick={onComplete}
+          className="bg-audazz-blue hover:bg-audazz-blue/90 rounded-full px-12 h-14 text-lg font-bold"
+        >
+          Concluir e Voltar
+        </Button>
+      </motion.div>
+    )
+  }
 
   return (
     <div className="w-full">
@@ -86,7 +158,6 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
               </span>
             </div>
           ))}
-          {/* Linha de Conexão */}
           <div className="absolute top-5 left-10 right-10 h-[2px] bg-white/5 -z-0">
             <motion.div 
               className="h-full bg-audazz-blue shadow-[0_0_10px_rgba(0,113,227,0.5)]"
@@ -99,7 +170,7 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
       </div>
 
       {/* Conteúdo do Step */}
-      <div className="p-8 min-h-[400px]">
+      <form onSubmit={handleSubmit(onSubmit)} className="p-8 min-h-[400px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -115,7 +186,6 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
                   <p className="text-sm text-muted-foreground">Dados básicos e de contato.</p>
                 </div>
                 
-                {/* Upload de Foto */}
                 <div className="col-span-2 flex justify-center pb-4">
                   <div className="relative group">
                     <div className="w-24 h-24 rounded-full bg-secondary/50 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden transition-all group-hover:border-audazz-blue/50 cursor-pointer">
@@ -142,19 +212,22 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
 
                 <div className="space-y-2">
                   <Label>Nome Completo</Label>
-                  <Input placeholder="Ex: Lucas Oliveira" className="bg-secondary/30 border-none rounded-xl h-11" />
-                </div>
-                <div className="space-y-2">
-                  <Label>E-mail Pessoal</Label>
-                  <Input placeholder="lucas@exemplo.com" className="bg-secondary/30 border-none rounded-xl h-11" />
-                </div>
-                <div className="space-y-2">
-                  <Label>WhatsApp</Label>
-                  <Input placeholder="(11) 99999-9999" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  <Input {...register("nome")} placeholder="Ex: Lucas Oliveira" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  {errors.nome && <p className="text-xs text-destructive">{errors.nome.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>CPF</Label>
-                  <Input placeholder="000.000.000-00" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  <Input {...register("cpf")} placeholder="000.000.000-00" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  {errors.cpf && <p className="text-xs text-destructive">{errors.cpf.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label>E-mail Profissional</Label>
+                  <Input {...register("emailProfissional")} placeholder="lucas@audazz.com" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  {errors.emailProfissional && <p className="text-xs text-destructive">{errors.emailProfissional.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label>WhatsApp</Label>
+                  <Input {...register("whatsapp")} placeholder="(11) 99999-9999" className="bg-secondary/30 border-none rounded-xl h-11" />
                 </div>
               </div>
             )}
@@ -167,20 +240,29 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
                 </div>
                 <div className="space-y-2">
                   <Label>Cargo</Label>
-                  <Input placeholder="Ex: Senior UI Designer" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  <Input {...register("cargo")} placeholder="Ex: Senior UI Designer" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  {errors.cargo && <p className="text-xs text-destructive">{errors.cargo.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Departamento</Label>
-                  <Select>
-                    <SelectTrigger className="bg-secondary/30 border-none rounded-xl h-11">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="design">Design</SelectItem>
-                      <SelectItem value="dev">Desenvolvimento</SelectItem>
-                      <SelectItem value="copy">Copywriting</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Controller
+                    name="departamento"
+                    control={control}
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <SelectTrigger className="bg-secondary/30 border-none rounded-xl h-11">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Design">Design</SelectItem>
+                          <SelectItem value="Desenvolvimento">Desenvolvimento</SelectItem>
+                          <SelectItem value="Social Media">Social Media</SelectItem>
+                          <SelectItem value="Tráfego Pago">Tráfego Pago</SelectItem>
+                          <SelectItem value="Gestão de Projetos">Gestão de Projetos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </div>
               </div>
             )}
@@ -192,21 +274,33 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
                   <p className="text-sm text-muted-foreground">Remuneração e dados bancários.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Salário / Fee</Label>
-                  <Input placeholder="R$ 0,00" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  <Label>Salário / Fee (Opcional)</Label>
+                  <Input 
+                    type="number"
+                    placeholder="R$ 0,00" 
+                    className="bg-secondary/30 border-none rounded-xl h-11"
+                    {...register("salarioMensal", { valueAsNumber: true })} 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Tipo de Contrato</Label>
-                  <Select>
-                    <SelectTrigger className="bg-secondary/30 border-none rounded-xl h-11">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pj">PJ</SelectItem>
-                      <SelectItem value="clt">CLT</SelectItem>
-                      <SelectItem value="freelance">Freelance</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Controller
+                    name="vinculo"
+                    control={control}
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <SelectTrigger className="bg-secondary/30 border-none rounded-xl h-11">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PJ">PJ</SelectItem>
+                          <SelectItem value="CLT">CLT</SelectItem>
+                          <SelectItem value="Freelancer">Freelance</SelectItem>
+                          <SelectItem value="Sócio">Sócio</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </div>
               </div>
             )}
@@ -218,54 +312,63 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
                   <p className="text-sm text-muted-foreground">Defina o papel no sistema.</p>
                 </div>
                 <div className="col-span-2 space-y-2">
-                  <Label>Role</Label>
-                  <Select>
-                    <SelectTrigger className="bg-secondary/30 border-none rounded-xl h-11">
-                      <SelectValue placeholder="Selecione o nível de permissão" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="gestor">Gestor</SelectItem>
-                      <SelectItem value="criativo">Criativo</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Role (Permissão)</Label>
+                  <Controller
+                    name="role"
+                    control={control}
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <SelectTrigger className="bg-secondary/30 border-none rounded-xl h-11">
+                          <SelectValue placeholder="Selecione o nível de permissão" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="gestor">Gestor</SelectItem>
+                          <SelectItem value="criativo">Criativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </div>
               </div>
             )}
           </motion.div>
         </AnimatePresence>
-      </div>
 
-      {/* Footer Estilo Modal */}
-      <div className="p-8 border-t border-white/5 bg-white/[0.02] flex justify-between items-center">
-        <Button 
-          variant="ghost" 
-          onClick={prevStep} 
-          disabled={step === 1}
-          className="rounded-full gap-2 font-bold hover:bg-white/5"
-        >
-          <ChevronLeft className="w-4 h-4" /> Anterior
-        </Button>
+        {/* Footer Estilo Modal */}
+        <div className="mt-8 pt-8 border-t border-white/5 flex justify-between items-center">
+          <Button 
+            type="button"
+            variant="ghost" 
+            onClick={prevStep} 
+            disabled={step === 1}
+            className="rounded-full gap-2 font-bold hover:bg-white/5"
+          >
+            <ChevronLeft className="w-4 h-4" /> Anterior
+          </Button>
 
-        <div className="flex gap-3">
-          {step < 4 ? (
-            <Button 
-              onClick={nextStep}
-              className="bg-audazz-blue hover:bg-audazz-blue/90 rounded-full px-10 gap-2 font-bold shadow-lg shadow-audazz-blue/20"
-            >
-              Próximo <ChevronRight className="w-4 h-4" />
-            </Button>
-          ) : (
-            <Button 
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={isLoading}
-              className="bg-audazz-blue hover:bg-audazz-blue/90 rounded-full px-10 gap-2 font-bold shadow-lg shadow-audazz-blue/20"
-            >
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> Finalizar Admissão</>}
-            </Button>
-          )}
+          <div className="flex gap-3">
+            {step < 4 ? (
+              <Button 
+                type="button"
+                onClick={nextStep}
+                className="bg-audazz-blue hover:bg-audazz-blue/90 rounded-full px-10 gap-2 font-bold shadow-lg shadow-audazz-blue/20"
+              >
+                Próximo <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              <Button 
+                type="submit"
+                disabled={isLoading}
+                className="bg-audazz-blue hover:bg-audazz-blue/90 rounded-full px-10 gap-2 font-bold shadow-lg shadow-audazz-blue/20"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> Finalizar Admissão</>}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      </form>
     </div>
   )
 }
+

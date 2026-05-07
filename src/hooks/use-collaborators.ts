@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { 
+  createCollaboratorAction,
   upsertCollaboratorAction, 
   registerAbsenceAction, 
   allocateProjectAction 
@@ -14,15 +15,15 @@ export function useCollaborators() {
   const handleCreate = async (data: any) => {
     setIsLoading(true)
     try {
-      const result = await upsertCollaboratorAction({
-        ...data,
-        agencyId: "audazz-nexus"
-      })
+      const result = await createCollaboratorAction(data)
       if (result.success) {
-        toast.success("Colaborador cadastrado com sucesso!")
-        return true
+        toast.success("Colaborador admitido com sucesso!")
+        return result // Retorna o resultado completo (incluindo a senha gerada)
       }
-      toast.error(result.error || "Erro ao cadastrar")
+      toast.error(result.error || "Erro ao admitir")
+      return false
+    } catch (error) {
+      toast.error("Erro inesperado ao admitir colaborador")
       return false
     } finally {
       setIsLoading(false)
