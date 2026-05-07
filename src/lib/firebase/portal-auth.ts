@@ -71,27 +71,4 @@ export async function getMemberToken(forceRefresh = false) {
   return null
 }
 
-/**
- * Lado do Servidor: Valida o token do portal e extrai os Custom Claims.
- * Esta funo deve ser chamada APENAS em Server Components ou API Routes.
- */
-export async function validatePortalToken(idToken: string) {
-  // Importao dinmica do Admin para evitar erro de bundle no client-side
-  const { adminAuth } = await import('./admin')
-  
-  try {
-    const decodedToken = await adminAuth.verifyIdToken(idToken)
-    
-    return {
-      uid: decodedToken.uid,
-      agencyId: decodedToken.agencyId,
-      clientId: decodedToken.clientId,
-      memberId: decodedToken.memberId,
-      role: decodedToken.role,
-      isValid: true
-    }
-  } catch (error) {
-    console.error("Token do portal invlido:", error)
-    return { isValid: false }
-  }
-}
+// Server-side validation moved to portal-auth-server.ts to avoid client-side bundling issues.
