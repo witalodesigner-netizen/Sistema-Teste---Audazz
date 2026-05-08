@@ -16,7 +16,7 @@ const ClientSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   tradeName: z.string().optional(),
   cnpj: z.string().optional(),
-  email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+  email: z.string().email("E-mail inválido").or(z.literal("")).optional(),
   phone: z.string().optional()
 })
 

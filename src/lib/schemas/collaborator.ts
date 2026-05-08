@@ -6,8 +6,8 @@ export const collaboratorPersonalSchema = z.object({
   nome: z.string().min(3, "Nome completo é obrigatório"),
   cpf: z.string().min(11, "CPF inválido").max(14),
   dataNascimento: z.date().optional(),
-  emailPessoal: z.string().email("E-mail pessoal inválido").optional().or(z.literal("")),
-  emailProfissional: z.string().email("E-mail profissional inválido"),
+  emailPessoal: z.string().email("E-mail pessoal inválido").or(z.literal("")).optional(),
+  emailProfissional: z.string().email("E-mail profissional inválido").or(z.literal("")).optional(),
   telefone: z.string().optional(),
   whatsapp: z.string().optional(),
   cep: z.string().optional(),
@@ -40,8 +40,8 @@ export const collaboratorProfessionalSchema = z.object({
 // ETAPA 3: Dados Financeiros
 export const collaboratorFinancialSchema = z.object({
   tipoRemuneracao: z.enum(["Salário fixo", "Por hora", "Por projeto", "Misto"] as const).optional().default("Salário fixo"),
-  salarioMensal: z.number().optional(),
-  valorHora: z.number().optional(),
+  salarioMensal: z.preprocess((val) => (val === "" || Number.isNaN(val) ? undefined : val), z.number().optional()),
+  valorHora: z.preprocess((val) => (val === "" || Number.isNaN(val) ? undefined : val), z.number().optional()),
   chavePix: z.string().optional(),
   banco: z.string().optional(),
   agencia: z.string().optional(),
