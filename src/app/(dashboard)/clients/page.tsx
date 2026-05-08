@@ -8,7 +8,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { motion } from "framer-motion"
-import Link from "next/link"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { ClientWizard } from "@/components/clients/ClientWizard"
 
 const clients = [
   { id: "CL-001", name: "TechFlow Solutions", contact: "Ricardo Santos", email: "ricardo@techflow.com", revenue: "R$ 150k/ano", status: "Ativo", icon: "TF" },
@@ -18,6 +19,8 @@ const clients = [
 ]
 
 export default function ClientsPage() {
+  const [isWizardOpen, setIsWizardOpen] = useState(false)
+
   return (
     <div className="space-y-6">
       <PageHeader 
@@ -25,11 +28,20 @@ export default function ClientsPage() {
         description="Gestão de base de clientes e parceiros"
         icon={Users}
         actions={
-          <Button className="bg-audazz-blue hover:bg-audazz-blue/90 rounded-full gap-2">
+          <Button 
+            onClick={() => setIsWizardOpen(true)}
+            className="bg-audazz-blue hover:bg-audazz-blue/90 rounded-full gap-2"
+          >
             <Plus className="w-4 h-4" /> Novo Cliente
           </Button>
         }
       />
+
+      <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
+        <DialogContent className="sm:max-w-2xl border-white/5 bg-background/95 backdrop-blur-2xl p-0 rounded-[2rem] shadow-2xl overflow-hidden">
+          <ClientWizard onComplete={() => setIsWizardOpen(false)} />
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative w-full md:w-96">
