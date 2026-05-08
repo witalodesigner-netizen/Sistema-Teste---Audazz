@@ -10,7 +10,11 @@ import { getStorage } from 'firebase-admin/storage'
 const getServiceAccount = () => {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     try {
-      return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+      const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+      if (parsed.private_key) {
+        parsed.private_key = parsed.private_key.replace(/\\n/g, '\n')
+      }
+      return parsed
     } catch (e) {
       console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:", e)
     }

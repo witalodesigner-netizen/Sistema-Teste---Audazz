@@ -189,7 +189,10 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
       </div>
 
       {/* Conteúdo do Step */}
-      <form onSubmit={handleSubmit(onSubmit)} className="p-8 min-h-[400px]">
+      <form onSubmit={handleSubmit(onSubmit, (errors) => {
+        console.error("Validation Errors:", errors);
+        toast.error("Preencha todos os campos corretamente.");
+      })} className="p-8 min-h-[400px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -239,8 +242,9 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
                   <Input 
                     {...register("cpf")} 
                     onChange={(e) => {
-                      e.target.value = formatCPF(e.target.value);
-                      register("cpf").onChange(e);
+                      const formatted = formatCPF(e.target.value);
+                      e.target.value = formatted;
+                      form.setValue("cpf", formatted, { shouldValidate: true });
                     }}
                     placeholder="000.000.000-00" 
                     className="bg-secondary/30 border-none rounded-xl h-11" 

@@ -5,7 +5,7 @@ export const collaboratorPersonalSchema = z.object({
   avatarUrl: z.string().optional(),
   nome: z.string().min(3, "Nome completo é obrigatório"),
   cpf: z.string().min(11, "CPF inválido").max(14),
-  dataNascimento: z.date(), // Removido required_error que estava causando erro no TS
+  dataNascimento: z.date().optional(),
   emailPessoal: z.string().email("E-mail pessoal inválido").optional().or(z.literal("")),
   emailProfissional: z.string().email("E-mail profissional inválido"),
   telefone: z.string().optional(),
@@ -27,19 +27,19 @@ export const collaboratorProfessionalSchema = z.object({
   cargo: z.string().min(1, "Cargo é obrigatório"),
   departamento: z.enum(["Design", "Tráfego Pago", "Social Media", "Desenvolvimento", "Gestão de Projetos", "Atendimento", "Financeiro", "Outro"] as const),
   vinculo: z.enum(["CLT", "PJ", "Freelancer", "Estágio", "Sócio"] as const),
-  senioridade: z.enum(["Júnior", "Pleno", "Sênior", "Especialista", "Líder"] as const),
-  dataEntrada: z.date(), // Removido required_error que estava causando erro no TS
-  cargaHoraria: z.number().min(1).max(168),
-  horarioInicio: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm"),
-  horarioFim: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm"),
-  diasTrabalho: z.array(z.string()).min(1, "Selecione pelo menos um dia"),
-  especialidades: z.array(z.string()),
+  senioridade: z.enum(["Júnior", "Pleno", "Sênior", "Especialista", "Líder"] as const).optional().default("Pleno"),
+  dataEntrada: z.date().optional(),
+  cargaHoraria: z.number().min(1).max(168).optional().default(40),
+  horarioInicio: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm").optional().default("09:00"),
+  horarioFim: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:mm").optional().default("18:00"),
+  diasTrabalho: z.array(z.string()).optional().default(["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]),
+  especialidades: z.array(z.string()).optional().default([]),
   bio: z.string().max(1000).optional(),
 })
 
 // ETAPA 3: Dados Financeiros
 export const collaboratorFinancialSchema = z.object({
-  tipoRemuneracao: z.enum(["Salário fixo", "Por hora", "Por projeto", "Misto"] as const),
+  tipoRemuneracao: z.enum(["Salário fixo", "Por hora", "Por projeto", "Misto"] as const).optional().default("Salário fixo"),
   salarioMensal: z.number().optional(),
   valorHora: z.number().optional(),
   chavePix: z.string().optional(),
@@ -47,7 +47,7 @@ export const collaboratorFinancialSchema = z.object({
   agencia: z.string().optional(),
   conta: z.string().optional(),
   cnpjPj: z.string().optional(),
-  beneficios: z.array(z.string()),
+  beneficios: z.array(z.string()).optional().default([]),
   observacoes: z.string().optional(),
 })
 

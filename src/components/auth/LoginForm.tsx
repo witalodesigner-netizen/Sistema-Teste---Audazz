@@ -65,7 +65,7 @@ export function LoginForm() {
       
       // Redirecionamento acontece via middleware ou listener no layout
       setTimeout(() => {
-        window.location.href = '/dashboard'
+        window.location.href = '/'
       }, 1500)
     } catch (err: any) {
       console.error('Login error:', err)

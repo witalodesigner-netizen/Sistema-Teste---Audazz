@@ -16,7 +16,7 @@ const ClientSchema = z.object({
   tradeName: z.string().optional(),
   cnpj: z.string().optional(),
   status: z.string().default('ativo'),
-  email: z.string().email().optional(),
+  email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional()
 })
 

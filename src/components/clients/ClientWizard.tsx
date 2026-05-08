@@ -123,7 +123,10 @@ export function ClientWizard({ onComplete }: { onComplete: () => void }) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="p-8 min-h-[300px]">
+      <form onSubmit={handleSubmit(onSubmit, (errors) => {
+        console.error("Validation Errors:", errors);
+        toast.error("Preencha todos os campos obrigatórios corretamente.");
+      })} className="p-8 min-h-[300px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
