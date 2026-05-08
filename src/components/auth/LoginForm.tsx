@@ -42,11 +42,6 @@ export function LoginForm() {
       .replace(/(-\d{2})\d+?$/, '$1')
   }
 
-  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatCPF(e.target.value)
-    setValue('cpf', formatted, { shouldValidate: true })
-  }
-
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true)
     setError(null)
@@ -54,8 +49,8 @@ export function LoginForm() {
     try {
       const result = await signInWithCpf(data.cpf, data.password)
       
-      if (!result.success) {
-        throw new Error(result.error)
+      if (!result.success || !result.user) {
+        throw new Error(result.error || 'Erro ao obter dados do usuário')
       }
 
       // Get the ID token to store in a cookie for the middleware
@@ -132,8 +127,13 @@ export function LoginForm() {
                 placeholder="000.000.000-00"
                 className="pl-12 bg-white/5 border-white/10 h-14 rounded-2xl focus:ring-primary focus:border-primary transition-all text-lg"
                 autoComplete="username"
-                {...register('cpf')}
-                onChange={handleCpfChange}
+                {...register('cpf', {
+                  onChange: (e) => {
+                    const formatted = formatCPF(e.target.value)
+                    e.target.value = formatted
+                    setValue('cpf', formatted)
+                  }
+                })}
               />
             </div>
             {errors.cpf && (
