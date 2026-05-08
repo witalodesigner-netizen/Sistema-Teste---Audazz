@@ -1,10 +1,12 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { adminDb } from "@/lib/firebase/admin"
 import { revalidatePath } from "next/cache"
+import { FieldValue } from "firebase-admin/firestore"
 import { z } from "zod"
 
-// Schema básico para validação (o schema completo será criado no Item 3)
+const AGENCY_ID = "audazz-nexus"
+
 const MemberSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
@@ -15,52 +17,62 @@ const MemberSchema = z.object({
 
 export async function createClientMember(clientId: string, data: z.infer<typeof MemberSchema>) {
   try {
-    const member = await db.clientMember.create({
-      data: {
-        ...data,
-        clientId,
-        status: "pendente",
-        password: "TEMPORARY_PASSWORD", // Será definida pelo cliente no aceite do convite
-        permissions: {
-          create: {} // Default permissions
-        }
-      }
+    const memberRef = adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('clients').doc(clientId)
+      .collection('members').doc()
+
+    await memberRef.set({
+      ...data,
+      clientId,
+      status: "pendente",
+      permissions: { verAprovacoes: true, aprovar: false, acessarMateriais: true },
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      deletedAt: null
     })
 
-    // Lógica de convite seria disparada aqui (Item 2 - Resend)
-    
-    revalidatePath(`/clientes/${clientId}`)
-    return { success: true, data: member }
+    revalidatePath(`/clients/${clientId}`)
+    return { success: true, data: { id: memberRef.id } }
   } catch (error) {
     console.error("Error creating member:", error)
     return { success: false, error: "Falha ao criar membro" }
   }
 }
 
-export async function updateMemberPermissions(memberId: string, permissions: any) {
+export async function updateMemberPermissions(clientId: string, memberId: string, permissions: any) {
   try {
-    await db.clientMemberPermission.update({
-      where: { memberId },
-      data: permissions
+    const memberRef = adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('clients').doc(clientId)
+      .collection('members').doc(memberId)
+
+    await memberRef.update({
+      permissions,
+      updatedAt: FieldValue.serverTimestamp()
     })
 
-    const member = await db.clientMember.findUnique({ where: { id: memberId } })
-    if (member) revalidatePath(`/clientes/${member.clientId}`)
-    
+    revalidatePath(`/clients/${clientId}`)
     return { success: true }
   } catch (error) {
     return { success: false, error: "Falha ao atualizar permissões" }
   }
 }
 
-export async function deleteClientMember(memberId: string) {
+export async function deleteClientMember(clientId: string, memberId: string) {
   try {
-    const member = await db.clientMember.update({
-      where: { id: memberId },
-      data: { deletedAt: new Date(), status: "inativo" }
+    const memberRef = adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('clients').doc(clientId)
+      .collection('members').doc(memberId)
+
+    await memberRef.update({
+      status: "inativo",
+      deletedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
     })
 
-    revalidatePath(`/clientes/${member.clientId}`)
+    revalidatePath(`/clients/${clientId}`)
     return { success: true }
   } catch (error) {
     return { success: false, error: "Falha ao remover membro" }

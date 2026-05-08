@@ -3,20 +3,16 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { encrypt } from '@/lib/security/crypto'
 import { logAudit } from '@/lib/security/audit'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { revalidatePath } from 'next/cache'
 import { FieldValue } from 'firebase-admin/firestore'
 
-/**
- * Salva as configuraes da API do Asaas com criptografia da chave.
- */
 export async function saveAsaasConfigAction(agencyId: string, data: { 
   apiKey: string, 
   environment: 'sandbox' | 'production' 
 }) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const configRef = adminDb
@@ -34,8 +30,8 @@ export async function saveAsaasConfigAction(agencyId: string, data: {
 
     await logAudit({
       agencyId,
-      userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userId: session.uid,
+      userEmail: session.email || 'sistema@audazz.com',
       userRole: 'admin',
       acao: 'UPDATE_CONFIG',
       recurso: 'ASAAS',
@@ -50,13 +46,9 @@ export async function saveAsaasConfigAction(agencyId: string, data: {
   }
 }
 
-/**
- * Salva configuraes da Evolution API (WhatsApp).
- */
 export async function saveWhatsAppConfigAction(agencyId: string, data: any) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const configRef = adminDb.collection('agencies').doc(agencyId).collection('config').doc('whatsapp')

@@ -1,7 +1,7 @@
 'use server'
 
 import { adminDb } from '@/lib/firebase/admin'
-import { auth } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -45,8 +45,8 @@ export async function createNotificationAction(agencyId: string, userId: string,
  * Marca uma notificao como lida.
  */
 export async function markNotificationAsReadAction(agencyId: string, notificationId: string) {
-  const { userId } = await auth()
-  if (!userId) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const docRef = adminDb

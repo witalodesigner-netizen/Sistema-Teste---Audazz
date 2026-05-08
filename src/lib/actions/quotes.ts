@@ -3,30 +3,23 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
 
-/**
- * Esquema de validao para oramentos.
- */
 const QuoteSchema = z.object({
   agencyId: z.string().min(1),
   clientId: z.string().min(1),
   clientName: z.string(),
-  title: z.string().min(3, "Ttulo obrigatrio"),
+  title: z.string().min(3, "Título obrigatório"),
   description: z.string().optional(),
   total: z.number().positive("Valor total deve ser positivo"),
   validUntil: z.string().optional()
 })
 
-/**
- * Cria um novo oramento para o cliente.
- */
 export async function createQuoteAction(data: z.infer<typeof QuoteSchema>) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const validated = QuoteSchema.parse(data)
@@ -45,8 +38,8 @@ export async function createQuoteAction(data: z.infer<typeof QuoteSchema>) {
 
     await logAudit({
       agencyId: validated.agencyId,
-      userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userId: session.uid,
+      userEmail: session.email || 'sistema@audazz.com',
       userRole: 'admin',
       acao: 'CREATE',
       recurso: 'QUOTE',
@@ -58,18 +51,14 @@ export async function createQuoteAction(data: z.infer<typeof QuoteSchema>) {
     revalidatePath('/quotes')
     return { success: true, id: quoteRef.id }
   } catch (error: any) {
-    console.error("Erro ao criar oramento:", error)
+    console.error("Erro ao criar orçamento:", error)
     return { success: false, error: error.message }
   }
 }
 
-/**
- * Atualiza o status de um oramento.
- */
 export async function updateQuoteStatusAction(agencyId: string, quoteId: string, status: string) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const quoteRef = adminDb.collection('agencies').doc(agencyId).collection('quotes').doc(quoteId)
@@ -81,8 +70,8 @@ export async function updateQuoteStatusAction(agencyId: string, quoteId: string,
 
     await logAudit({
       agencyId,
-      userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userId: session.uid,
+      userEmail: session.email || 'sistema@audazz.com',
       userRole: 'admin',
       acao: 'UPDATE_QUOTE_STATUS',
       recurso: 'QUOTE',

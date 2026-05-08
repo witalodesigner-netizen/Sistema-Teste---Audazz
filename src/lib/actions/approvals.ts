@@ -3,21 +3,15 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import crypto from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 
-/**
- * Cria uma nova solicitao de aprovao para o cliente.
- * Gera um token nico para acesso sem login do portal (link pblico).
- */
 export async function createApprovalAction(agencyId: string, projectId: string, data: any) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
-    // Gera um token seguro de 64 caracteres para o link pblico
     const token = crypto.randomBytes(32).toString('hex')
     const approvalRef = adminDb.collection('agencies').doc(agencyId).collection('approvals').doc()
 
@@ -37,8 +31,8 @@ export async function createApprovalAction(agencyId: string, projectId: string, 
 
     await logAudit({
       agencyId,
-      userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userId: session.uid,
+      userEmail: session.email || 'sistema@audazz.com',
       userRole: 'admin',
       acao: 'CREATE',
       recurso: 'APPROVAL',
@@ -49,14 +43,11 @@ export async function createApprovalAction(agencyId: string, projectId: string, 
     revalidatePath(`/projects/${projectId}`)
     return { success: true, id: approvalRef.id, token }
   } catch (error: any) {
-    console.error("Erro ao criar aprovao:", error)
+    console.error("Erro ao criar aprovação:", error)
     return { success: false, error: error.message }
   }
 }
 
-/**
- * Registra a resposta do cliente a uma aprovao.
- */
 export async function respondToApprovalAction(agencyId: string, approvalId: string, response: { 
   status: string, 
   feedback?: string, 
@@ -76,9 +67,6 @@ export async function respondToApprovalAction(agencyId: string, approvalId: stri
     }
 
     await approvalRef.update(updateData)
-
-    // Nota: Audit log aqui  opcional pois  uma ao de cliente, 
-    // mas podemos registrar como sistema.
     
     revalidatePath('/approvals')
     return { success: true }

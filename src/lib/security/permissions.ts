@@ -1,13 +1,11 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/db";
+import { getPortalSession } from '@/lib/security/session'
 
 /**
  * Módulo de Permissões - Audazz Nexus OS
- * Controle de acesso baseado em Roles (RBAC) e Propriedade (Ownership).
+ * Controle de acesso baseado em Roles (RBAC) - via Firebase Custom Claims
  */
 
 export type Role = "admin" | "gestor" | "criativo";
-
 export type PermissionAction = "create" | "read" | "update" | "delete" | "manage";
 
 /**
@@ -18,52 +16,42 @@ export async function checkPermission(
   action: PermissionAction,
   resourceId?: string
 ) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Não autorizado. Faça login para continuar.");
+  const session = await getPortalSession()
+  if (!session) throw new Error("Não autorizado. Faça login para continuar.")
 
-  const user = await currentUser();
-  const role = (user?.publicMetadata?.role as Role) || "criativo";
+  const role = (session as any).role as Role || "criativo"
 
   // ADMIN tem permissão total
-  if (role === "admin") return true;
+  if (role === "admin") return true
 
   // GESTOR pode ler e criar a maioria, mas delete é restrito
   if (role === "gestor") {
     if (action === "delete" && !["solicitacao", "comentario"].includes(resource)) {
-      return false;
+      return false
     }
-    return true;
+    return true
   }
 
   // CRIATIVO tem permissão limitada
   if (role === "criativo") {
-    // Só pode gerenciar tarefas e solicitações
-    const allowedResources = ["solicitacao", "comentario", "material", "projeto"];
-    if (!allowedResources.includes(resource)) return false;
-    
-    // Não pode deletar nada
-    if (action === "delete") return false;
-    
-    return true;
+    const allowedResources = ["solicitacao", "comentario", "material", "projeto"]
+    if (!allowedResources.includes(resource)) return false
+    if (action === "delete") return false
+    return true
   }
 
-  return false;
+  return false
 }
 
 /**
- * Verifica se o usuário é o dono do recurso ou tem permissão de gestão
+ * Verifica se o usuário é dono do recurso ou tem permissão de gestão
  */
 export async function checkOwnership(resource: string, resourceId: string) {
-  const { userId } = await auth();
-  if (!userId) return false;
+  const session = await getPortalSession()
+  if (!session) return false
 
-  const user = await currentUser();
-  const role = user?.publicMetadata?.role as Role;
+  const role = (session as any).role as Role
+  if (role === "admin") return true
 
-  if (role === "admin") return true;
-
-  // Implementação específica por recurso pode ser adicionada aqui
-  // Ex: verificar se o projeto pertence ao colaborador, etc.
-  
-  return true;
+  return true
 }

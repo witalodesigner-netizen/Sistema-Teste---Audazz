@@ -3,32 +3,25 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
 
-/**
- * Esquema de validao para faturas.
- */
 const InvoiceSchema = z.object({
   agencyId: z.string().min(1),
   clientId: z.string().min(1),
   clientName: z.string(),
   projectId: z.string().optional(),
   projectName: z.string().optional(),
-  description: z.string().min(1, "Descrio obrigatria"),
+  description: z.string().min(1, "Descrição obrigatória"),
   value: z.number().positive("Valor deve ser positivo"),
-  dueDate: z.string().min(1, "Data de vencimento obrigatria"),
+  dueDate: z.string().min(1, "Data de vencimento obrigatória"),
   paymentMethod: z.string().optional()
 })
 
-/**
- * Cria uma nova fatura financeira.
- */
 export async function createInvoiceAction(data: z.infer<typeof InvoiceSchema>) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const validated = InvoiceSchema.parse(data)
@@ -47,8 +40,8 @@ export async function createInvoiceAction(data: z.infer<typeof InvoiceSchema>) {
 
     await logAudit({
       agencyId: validated.agencyId,
-      userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userId: session.uid,
+      userEmail: session.email || 'sistema@audazz.com',
       userRole: 'admin',
       acao: 'CREATE',
       recurso: 'INVOICE',
@@ -57,7 +50,7 @@ export async function createInvoiceAction(data: z.infer<typeof InvoiceSchema>) {
       sucesso: true
     })
 
-    revalidatePath('/financeiro')
+    revalidatePath('/finance')
     return { success: true, id: invoiceRef.id }
   } catch (error: any) {
     console.error("Erro ao criar fatura:", error)
@@ -65,13 +58,9 @@ export async function createInvoiceAction(data: z.infer<typeof InvoiceSchema>) {
   }
 }
 
-/**
- * Atualiza o status de pagamento de uma fatura.
- */
 export async function updateInvoiceStatusAction(agencyId: string, invoiceId: string, status: string) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const invoiceRef = adminDb.collection('agencies').doc(agencyId).collection('invoices').doc(invoiceId)
@@ -89,8 +78,8 @@ export async function updateInvoiceStatusAction(agencyId: string, invoiceId: str
 
     await logAudit({
       agencyId,
-      userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userId: session.uid,
+      userEmail: session.email || 'sistema@audazz.com',
       userRole: 'admin',
       acao: 'UPDATE_INVOICE_STATUS',
       recurso: 'INVOICE',
@@ -99,7 +88,7 @@ export async function updateInvoiceStatusAction(agencyId: string, invoiceId: str
       sucesso: true
     })
 
-    revalidatePath('/financeiro')
+    revalidatePath('/finance')
     return { success: true }
   } catch (error: any) {
     return { success: false, error: error.message }

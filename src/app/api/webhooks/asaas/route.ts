@@ -1,124 +1,92 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { adminDb } from "@/lib/firebase/admin";
 import { headers } from "next/headers";
-import { WhatsappService } from "@/lib/services/whatsapp";
-import { RdStationService } from "@/lib/services/rdstation";
+import { FieldValue } from "firebase-admin/firestore";
+
+const AGENCY_ID = "audazz-nexus";
 
 /**
  * Webhook Asaas - Audazz Nexus OS
- * Orquestrador de Integrações: Recebe notificações e automatiza ações no WhatsApp, CRM e RD Station.
+ * Orquestrador de Integrações: Recebe notificações e automatiza ações.
  */
 
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json();
     const headerList = await headers();
-    // 1. Validação de Segurança (Dinâmica via Banco de Dados)
-    const config = await prisma.asaasConfig.findFirst({
-      where: { ativo: true }
-    });
 
+    // 1. Validação de Segurança via Firestore
+    const configDoc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('asaas')
+      .get();
+
+    const config = configDoc.data();
     const asaasToken = headerList.get("asaas-access-token");
-    if (!config || asaasToken !== config.webhookToken) {
-      console.warn("⚠️ Tentativa de webhook Asaas com token inválido ou integração inativa.");
+    
+    if (!config?.ativo || asaasToken !== config?.webhookToken) {
+      console.warn("⚠️ Webhook Asaas com token inválido ou integração inativa.");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // 2. Log de Recebimento
-    await prisma.asaasWebhookLog.create({
-      data: {
+    await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('webhookLogs').doc()
+      .set({
+        tipo: "ASAAS",
         evento: payload.event,
-        payload: payload,
-      }
-    });
+        payload,
+        createdAt: FieldValue.serverTimestamp()
+      });
 
     const event = payload.event;
     const payment = payload.payment;
-    const externalId = payment.externalReference;
+    const externalId = payment?.externalReference;
 
-    // 3. Processamento e Orquestração
+    // 3. Processamento
     if (externalId) {
-      // Busca dados da fatura e cliente para as automações
-      const invoice = await prisma.invoice.findUnique({
-        where: { id: externalId },
-        include: { client: { include: { portalConfig: true } } }
-      });
+      const invoiceRef = adminDb
+        .collection('agencies').doc(AGENCY_ID)
+        .collection('invoices').doc(externalId);
 
-      if (invoice) {
+      const invoiceDoc = await invoiceRef.get();
+      if (invoiceDoc.exists) {
         switch (event) {
           case "PAYMENT_RECEIVED":
           case "PAYMENT_CONFIRMED":
-            // Ação 1: Atualizar Banco de Dados
-            await prisma.invoice.update({
-              where: { id: externalId },
-              data: { status: "pago", asaasStatus: payment.status }
+            await invoiceRef.update({
+              status: "pago",
+              asaasStatus: payment.status,
+              paidAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp()
             });
-
-            // Ação 2: Automação WhatsApp
-            if (invoice.client.portalConfig?.ativo) {
-              try {
-                const message = `🚀 *Pagamento Confirmado!* \n\nOlá, confirmamos o recebimento do seu pagamento referente à fatura *#${invoice.id}* no valor de R$ ${invoice.valor.toFixed(2)}.\n\nObrigado pela confiança!`;
-                // Tenta buscar um telefone do membro principal ou do cliente
-                const clientPhone = invoice.client.asaasCustomerId; // Mock/Simplificação para o exemplo
-                // No cenário real, buscaríamos o telefone do ClientMember ou do cadastro do Client
-                // await WhatsappService.sendMessage("5511999999999", message); 
-              } catch (e) {
-                console.error("Erro ao enviar WhatsApp no Webhook:", e);
-              }
-            }
-
-            // Ação 3: Sincronização RD Station
-            try {
-              const rd = await RdStationService.init();
-              await rd.triggerEvent("PAGAMENTO_CONFIRMADO", {
-                email: invoice.client.slug + "@cliente.com", // Exemplo de mapeamento
-                valor: invoice.valor,
-                fatura_id: invoice.id
-              });
-            } catch (e) {
-              console.warn("RD Station não configurado para este evento.");
-            }
             break;
 
           case "PAYMENT_OVERDUE":
-            // Ação 1: Atualizar Banco de Dados
-            await prisma.invoice.update({
-              where: { id: externalId },
-              data: { status: "vencido", asaasStatus: payment.status }
+            await invoiceRef.update({
+              status: "vencido",
+              asaasStatus: payment.status,
+              updatedAt: FieldValue.serverTimestamp()
             });
-
-            // Ação 2: Automação WhatsApp (Lembrete)
-            try {
-              const reminder = `⚠️ *Lembrete de Vencimento* \n\nOlá, notamos que a fatura *#${invoice.id}* consta como pendente no sistema. \n\nCaso já tenha realizado o pagamento, desconsidere esta mensagem.`;
-              // await WhatsappService.sendMessage("5511999999999", reminder);
-            } catch (e) {}
             break;
 
           case "PAYMENT_DELETED":
-            await prisma.invoice.update({
-              where: { id: externalId },
-              data: { status: "cancelado", asaasStatus: payment.status }
+            await invoiceRef.update({
+              status: "cancelado",
+              asaasStatus: payment.status,
+              updatedAt: FieldValue.serverTimestamp()
             });
             break;
 
           case "PAYMENT_REFUNDED":
-            await prisma.invoice.update({
-              where: { id: externalId },
-              data: { status: "estornado", asaasStatus: payment.status }
+            await invoiceRef.update({
+              status: "estornado",
+              asaasStatus: payment.status,
+              updatedAt: FieldValue.serverTimestamp()
             });
             break;
         }
-
-        // 4. Auditoria da Integração
-        await prisma.auditLog.create({
-          data: {
-            acao: "INTEGRACAO_ASAAS_WEBHOOK",
-            recurso: "Invoice",
-            recursoId: externalId,
-            sucesso: true,
-            motivo: `Evento ${event} processado e orquestrado com sucesso.`,
-          }
-        });
       }
     }
 
@@ -128,4 +96,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

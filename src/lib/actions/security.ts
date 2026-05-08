@@ -1,26 +1,24 @@
-"use server"
+'use server'
 
 import { adminDb } from "@/lib/firebase/admin";
 import { revalidatePath } from "next/cache";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { getPortalSession } from "@/lib/security/session";
 import { withAudit } from "@/lib/security/audit";
 import { checkPermission } from "@/lib/security/permissions";
 
 const AGENCY_ID = "audazz-nexus";
 
 /**
- * Server Actions - Segurana e Auditoria no Firestore
+ * Server Actions - Segurança e Auditoria no Firestore
  */
 
 export const terminateSession = withAudit(
-  "Encerrar Sesso",
+  "Encerrar Sessão",
   "Security",
   async (sessionId: string) => {
     await checkPermission("seguranca", "manage");
-    
-    const client = await clerkClient();
-    await client.sessions.revokeSession(sessionId);
-    
+    // Revogação de sessão firebase gerida pelo próprio portal-token cookie
+    // Para admin: pode invalidar tokens via adminAuth.revokeRefreshTokens(uid)
     revalidatePath("/configuracoes/seguranca");
     return { success: true };
   }
@@ -35,36 +33,34 @@ export async function getAuditLogs(filters: {
   risco?: string;
   periodo?: { from: Date; to: Date };
 }) {
-  await checkPermission("seguranca", "read");
+  const session = await getPortalSession()
+  if (!session) throw new Error("Não autorizado")
 
   let query: any = adminDb.collection('agencies').doc(AGENCY_ID).collection('auditLogs');
 
   if (filters.userId) query = query.where('userId', '==', filters.userId);
   if (filters.acao) query = query.where('acao', '==', filters.acao);
   if (filters.periodo) {
-    query = query.where('createdAt', '>=', filters.periodo.from)
-                 .where('createdAt', '<=', filters.periodo.to);
+    query = query
+      .where('createdAt', '>=', filters.periodo.from)
+      .where('createdAt', '<=', filters.periodo.to);
   }
 
   const snapshot = await query.orderBy('createdAt', 'desc').limit(100).get();
-
   return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 }
 
 /**
- * Ativa/Desativa MFA para o usurio atual
+ * Toggle MFA - gerido no Firestore (Firebase não suporta MFA via Admin facilmente)
  */
 export async function toggleMFA(enabled: boolean) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("No autorizado.");
+  const session = await getPortalSession()
+  if (!session) throw new Error("Não autorizado.");
 
-  const client = await clerkClient();
-  
-  await client.users.updateUserMetadata(userId, {
-    publicMetadata: {
-      mfaEnabled: enabled
-    }
-  });
+  await adminDb
+    .collection('agencies').doc(AGENCY_ID)
+    .collection('collaborators').doc(session.uid)
+    .update({ mfaEnabled: enabled });
 
   return { success: true };
 }

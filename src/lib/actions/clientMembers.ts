@@ -3,24 +3,15 @@
 import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import bcrypt from 'bcryptjs'
 import { FieldValue } from 'firebase-admin/firestore'
 
-/**
- * Cria um novo membro para o Portal do Cliente.
- * Integra Firebase Auth com Custom Claims e Firestore.
- */
 export async function createClientMemberAction(agencyId: string, clientId: string, data: any) {
-  const { userId: adminId } = await auth()
-  const adminUser = await currentUser()
-  
-  if (!adminId || !adminUser) {
-    return { success: false, error: 'No autorizado' }
-  }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
-    // 1. Cria o usurio na camada de Autenticao do Firebase
     const userRecord = await adminAuth.createUser({
       email: data.email,
       password: data.password,
@@ -28,7 +19,6 @@ export async function createClientMemberAction(agencyId: string, clientId: strin
       photoURL: data.avatarUrl || null
     })
 
-    // 2. Define Custom Claims para segurana via Security Rules (isolamento total)
     await adminAuth.setCustomUserClaims(userRecord.uid, {
       agencyId,
       clientId,
@@ -36,11 +26,9 @@ export async function createClientMemberAction(agencyId: string, clientId: strin
       isClientMember: true
     })
 
-    // 3. Hash da senha para redundncia (Bcrypt)
     const salt = await bcrypt.genSalt(10)
     const passwordHash = await bcrypt.hash(data.password, salt)
 
-    // 4. Salva o perfil do membro no Firestore
     const memberRef = adminDb
       .collection('agencies')
       .doc(agencyId)
@@ -53,7 +41,7 @@ export async function createClientMemberAction(agencyId: string, clientId: strin
       uid: userRecord.uid,
       name: data.name,
       email: data.email,
-      passwordHash, // Nunca usar AES para senhas, sempre hash unidirecional
+      passwordHash,
       role: data.role || 'VISUALIZADOR',
       jobTitle: data.jobTitle || '',
       phone: data.phone || '',
@@ -72,8 +60,8 @@ export async function createClientMemberAction(agencyId: string, clientId: strin
 
     await logAudit({
       agencyId,
-      userId: adminId,
-      userEmail: adminUser.emailAddresses[0].emailAddress,
+      userId: session.uid,
+      userEmail: session.email || 'sistema@audazz.com',
       userRole: 'admin',
       acao: 'CREATE_PORTAL_MEMBER',
       recurso: 'CLIENT_MEMBER',

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { adminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
+
+const AGENCY_ID = "audazz-nexus";
 
 /**
  * Webhook WhatsApp - Audazz Nexus OS
@@ -18,18 +21,23 @@ export async function POST(req: NextRequest) {
       const status = change?.value?.statuses?.[0];
 
       if (status) {
-        await prisma.whatsappLog.updateMany({
-          where: { metaMessageId: status.id },
-          data: {
+        // Busca o log pelo metaMessageId e atualiza
+        const snapshot = await adminDb
+          .collection('agencies').doc(AGENCY_ID)
+          .collection('whatsappLogs')
+          .where('metaMessageId', '==', status.id)
+          .limit(1)
+          .get();
+
+        if (!snapshot.empty) {
+          await snapshot.docs[0].ref.update({
             status: status.status,
-            entregueEm: status.status === "delivered" ? new Date() : undefined,
-            lidaEm: status.status === "read" ? new Date() : undefined,
-          }
-        });
+            entregueEm: status.status === "delivered" ? FieldValue.serverTimestamp() : null,
+            lidaEm: status.status === "read" ? FieldValue.serverTimestamp() : null,
+            updatedAt: FieldValue.serverTimestamp()
+          });
+        }
       }
-    } else if (payload.event === "messages.upsert") {
-      // Evolution API
-      // ... processar conforme documentação Evolution
     }
 
     return NextResponse.json({ success: true });
@@ -48,11 +56,13 @@ export async function GET(req: NextRequest) {
   const challenge = searchParams.get("hub.challenge");
 
   if (mode && token) {
-    const config = await prisma.whatsappConfig.findFirst({
-      where: { metaWebhookToken: token }
-    });
+    const configDoc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('whatsapp')
+      .get();
 
-    if (config) {
+    const config = configDoc.data();
+    if (config?.metaWebhookToken === token) {
       return new NextResponse(challenge);
     }
   }

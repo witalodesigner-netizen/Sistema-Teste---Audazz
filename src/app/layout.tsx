@@ -4,16 +4,14 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ClerkProvider } from "@clerk/nextjs";
 import { DynamicFavicon } from "@/components/layout/DynamicFavicon";
+import { getBrandingConfig } from "@/lib/actions/branding";
 
 const poppins = Poppins({
   variable: "--font-poppins",
   subsets: ["latin"],
   weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
 });
-
-import { getBrandingConfig } from "@/lib/actions/branding";
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getBrandingConfig();
@@ -43,24 +41,19 @@ export default async function RootLayout({
       <head>
         <link rel="icon" href={favicon} sizes="any" />
       </head>
-      <body
-        className="antialiased"
-        suppressHydrationWarning
-      >
-        <ClerkProvider>
-          <DynamicFavicon />
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <TooltipProvider>
-              {children}
-              <Toaster position="top-right" />
-            </TooltipProvider>
-          </ThemeProvider>
-        </ClerkProvider>
+      <body className="antialiased" suppressHydrationWarning>
+        <DynamicFavicon />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            {children}
+            <Toaster position="top-right" />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

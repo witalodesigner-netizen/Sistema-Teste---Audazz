@@ -1,5 +1,9 @@
-import axios from 'axios';
-import { prisma } from '@/lib/db';
+import axios, { AxiosInstance } from 'axios';
+import { adminDb } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
+import { decrypt } from '@/lib/security/crypto';
+
+const AGENCY_ID = "audazz-nexus";
 
 /**
  * Service WhatsApp - Audazz Nexus OS
@@ -7,12 +11,14 @@ import { prisma } from '@/lib/db';
  */
 
 export class WhatsappService {
-  /**
-   * Envia uma mensagem de texto simples
-   */
   static async sendMessage(phone: string, text: string) {
-    const config = await prisma.whatsappConfig.findFirst({ where: { ativo: true } });
-    if (!config) throw new Error('WhatsApp não configurado ou inativo.');
+    const configDoc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('whatsapp')
+      .get();
+    
+    const config = configDoc.data();
+    if (!config?.ativo) throw new Error('WhatsApp não configurado ou inativo.');
 
     const formattedPhone = this.formatPhone(phone);
 
@@ -23,18 +29,18 @@ export class WhatsappService {
     }
   }
 
-  /**
-   * Envia uma mensagem baseada em template
-   */
   static async sendTemplate(phone: string, templateName: string, variables: string[]) {
-    const config = await prisma.whatsappConfig.findFirst({ where: { ativo: true } });
-    if (!config) throw new Error('WhatsApp não configurado ou inativo.');
+    const configDoc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('whatsapp')
+      .get();
+    
+    const config = configDoc.data();
+    if (!config?.ativo) throw new Error('WhatsApp não configurado ou inativo.');
 
     const formattedPhone = this.formatPhone(phone);
 
     if (config.modalidade === 'evolution') {
-      // Evolution usa mensagens de texto para templates ou formato próprio
-      // Aqui vamos simular o envio do conteúdo processado
       return this.sendEvolutionMessage(config, formattedPhone, `Template: ${templateName} | Vars: ${variables.join(', ')}`);
     } else {
       return this.sendMetaTemplate(config, formattedPhone, templateName, variables);
@@ -105,22 +111,22 @@ export class WhatsappService {
   }
 
   private static formatPhone(phone: string) {
-    // Remove tudo que não é número
     const clean = phone.replace(/\D/g, '');
-    // Garante código do país (55)
     return clean.startsWith('55') ? clean : `55${clean}`;
   }
 
   private static async logMessage(phone: string, content: string, tipo: string, status: string, erro?: string, metaId?: string) {
-    await prisma.whatsappLog.create({
-      data: {
+    await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('whatsappLogs').doc()
+      .set({
         telefone: phone,
         conteudo: content,
         tipo,
         status,
-        erro,
-        metaMessageId: metaId
-      }
-    });
+        erro: erro || null,
+        metaMessageId: metaId || null,
+        createdAt: FieldValue.serverTimestamp()
+      });
   }
 }

@@ -1,70 +1,66 @@
 "use server"
 
-import { prisma } from "@/lib/db";
-import { revalidatePath } from "next/cache";
-import { checkPermission } from "@/lib/security/permissions";
+import { adminDb } from "@/lib/firebase/admin"
+import { revalidatePath } from "next/cache"
+import { FieldValue } from "firebase-admin/firestore"
+import { checkPermission } from "@/lib/security/permissions"
 
-/**
- * Server Actions - Configuração de Webhooks Asaas
- */
+const AGENCY_ID = "audazz-nexus"
 
 export async function saveAsaasWebhook(token: string) {
   try {
-    await checkPermission("configuracao", "manage");
+    await checkPermission("configuracao", "manage")
 
-    // Atualiza ou cria a configuração principal do Asaas com o novo token de webhook
-    const config = await prisma.asaasConfig.findFirst();
-    
-    if (config) {
-      await prisma.asaasConfig.update({
-        where: { id: config.id },
-        data: { webhookToken: token, ativo: true }
-      });
-    } else {
-      await prisma.asaasConfig.create({
-        data: { 
-          webhookToken: token, 
-          apiKeyEncrypted: "pending", 
-          ativo: true 
-        }
-      });
-    }
+    const configRef = adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('asaas')
 
-    revalidatePath("/settings/integrations/asaas");
-    return { success: true };
+    await configRef.set({
+      webhookToken: token,
+      ativo: true,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true })
+
+    revalidatePath("/settings/integrations/asaas")
+    return { success: true }
   } catch (error: any) {
-    console.error("Erro ao salvar token de webhook:", error);
-    return { success: false, error: error.message };
+    console.error("Erro ao salvar token de webhook:", error)
+    return { success: false, error: error.message }
   }
 }
 
 export async function getAsaasWebhookToken() {
   try {
-    const config = await prisma.asaasConfig.findFirst({
-      select: { webhookToken: true }
-    });
-    return { success: true, token: config?.webhookToken || "" };
+    const doc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('asaas')
+      .get()
+
+    return { success: true, token: doc.data()?.webhookToken || "" }
   } catch (error: any) {
-    return { success: false, token: "" };
+    return { success: false, token: "" }
   }
 }
 
 export async function deleteAsaasWebhook(id: string) {
   try {
-    await checkPermission("configuracao", "manage");
-    await prisma.asaasWebhookConfig.delete({
-      where: { id }
-    });
-    revalidatePath("/settings/integrations/asaas");
-    return { success: true };
+    await checkPermission("configuracao", "manage")
+
+    await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('webhooks').doc(id)
+      .delete()
+
+    revalidatePath("/settings/integrations/asaas")
+    return { success: true }
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: error.message }
   }
 }
 
 export async function testAsaasWebhook(token: string) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const response = await fetch(`${baseUrl}/api/webhooks/asaas`, {
       method: "POST",
       headers: {
@@ -79,15 +75,15 @@ export async function testAsaasWebhook(token: string) {
           externalReference: "test_ref"
         }
       })
-    });
+    })
 
     if (response.ok) {
-      return { success: true };
+      return { success: true }
     } else {
-      const errorData = await response.json();
-      return { success: false, error: errorData.error || "Erro desconhecido" };
+      const errorData = await response.json()
+      return { success: false, error: errorData.error || "Erro desconhecido" }
     }
   } catch (error: any) {
-    return { success: false, error: "Não foi possível alcançar a URL do Webhook." };
+    return { success: false, error: "Não foi possível alcançar a URL do Webhook." }
   }
 }

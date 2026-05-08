@@ -3,7 +3,7 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -23,9 +23,8 @@ const TimesheetSchema = z.object({
  * Registra horas trabalhadas no timesheet do colaborador.
  */
 export async function logTimeAction(data: z.infer<typeof TimesheetSchema>) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session) return { success: false, error: 'Não autorizado' }
 
   try {
     const validated = TimesheetSchema.parse(data)

@@ -1,5 +1,8 @@
 import axios, { AxiosInstance } from 'axios';
-import { prisma } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
+
+const AGENCY_ID = "audazz-nexus";
 
 /**
  * Service RD Station - Audazz Nexus OS
@@ -36,30 +39,28 @@ export class RdStationService {
     );
   }
 
-  /**
-   * Inicializa o service buscando as credenciais no banco
-   */
   static async init() {
-    const config = await prisma.rdStationConfig.findFirst({
-      where: { ativo: true }
-    });
+    const configDoc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('rdstation')
+      .get();
 
-    if (!config || !config.accessToken) {
+    const config = configDoc.data();
+    if (!config?.ativo || !config?.accessToken) {
       throw new Error('Integração RD Station não configurada ou inativa.');
     }
 
-    return new RdStationService(config.id, config.accessToken);
+    return new RdStationService(configDoc.id, config.accessToken);
   }
 
-  /**
-   * Atualiza o access token usando o refresh token
-   */
   private async refreshToken(): Promise<string> {
-    const config = await prisma.rdStationConfig.findUnique({
-      where: { id: this.configId }
-    });
+    const configDoc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('rdstation')
+      .get();
 
-    if (!config || !config.refreshToken) throw new Error('Refresh token não encontrado.');
+    const config = configDoc.data();
+    if (!config?.refreshToken) throw new Error('Refresh token não encontrado.');
 
     try {
       const response = await axios.post('https://api.rd.services/auth/token', {
@@ -70,14 +71,15 @@ export class RdStationService {
 
       const { access_token, refresh_token, expires_in } = response.data;
 
-      await prisma.rdStationConfig.update({
-        where: { id: this.configId },
-        data: {
+      await adminDb
+        .collection('agencies').doc(AGENCY_ID)
+        .collection('config').doc('rdstation')
+        .update({
           accessToken: access_token,
           refreshToken: refresh_token,
-          tokenExpiresAt: new Date(Date.now() + expires_in * 1000)
-        }
-      });
+          tokenExpiresAt: new Date(Date.now() + expires_in * 1000),
+          updatedAt: FieldValue.serverTimestamp()
+        });
 
       return access_token;
     } catch (error) {
@@ -86,17 +88,11 @@ export class RdStationService {
     }
   }
 
-  /**
-   * Sincroniza um contato com o RD Station
-   */
   async syncContact(email: string, data: any) {
     const response = await this.api.patch(`/platform/contacts/email:${email}`, data);
     return response.data;
   }
 
-  /**
-   * Dispara um evento de conversão
-   */
   async triggerEvent(eventType: string, payload: any) {
     const response = await this.api.post('/platform/events', {
       event_type: eventType,
@@ -105,12 +101,7 @@ export class RdStationService {
     return response.data;
   }
 
-  /**
-   * Atualiza estágio de uma oportunidade no CRM
-   */
   async updateOpportunity(opportunityId: string, stage: string) {
-    // Nota: A API de CRM pode ter endpoints diferentes (crm.rdstation.com.br)
-    // Aqui usamos o padrão de plataforma unificada se disponível
     const response = await this.api.put(`/platform/opportunities/${opportunityId}`, {
       lifecycle_stage: stage
     });

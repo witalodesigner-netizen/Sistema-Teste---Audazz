@@ -1,14 +1,17 @@
 import axios, { AxiosInstance } from 'axios';
-import { prisma } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { decrypt } from '@/lib/security/crypto';
+
+const AGENCY_ID = "audazz-nexus";
+
+const ASAAS_SANDBOX_URL = 'https://sandbox.asaas.com/api/v3';
+const ASAAS_PRODUCTION_URL = 'https://api.asaas.com/api/v3';
 
 /**
  * Service Asaas - Audazz Nexus OS
  * Integração completa com a API v3 do Asaas.
  */
-
-const ASAAS_SANDBOX_URL = 'https://sandbox.asaas.com/api/v3';
-const ASAAS_PRODUCTION_URL = 'https://api.asaas.com/api/v3';
 
 export class AsaasService {
   private api: AxiosInstance;
@@ -30,44 +33,42 @@ export class AsaasService {
       async (error) => {
         const status = error.response?.status;
         
-        // Log de erro no banco (AsaasApiLog)
-        await prisma.asaasApiLog.create({
-          data: {
-            metodo: error.config.method?.toUpperCase() || 'UNKNOWN',
-            endpoint: error.config.url || 'UNKNOWN',
-            statusCode: status || 500,
-            duracao: 0,
-            erro: error.response?.data?.errors?.[0]?.description || error.message,
-          }
-        });
+        // Log de erro no Firestore
+        try {
+          await adminDb
+            .collection('agencies').doc(AGENCY_ID)
+            .collection('apiLogs').doc()
+            .set({
+              tipo: 'ASAAS',
+              metodo: error.config?.method?.toUpperCase() || 'UNKNOWN',
+              endpoint: error.config?.url || 'UNKNOWN',
+              statusCode: status || 500,
+              erro: error.response?.data?.errors?.[0]?.description || error.message,
+              createdAt: FieldValue.serverTimestamp()
+            });
+        } catch (logErr) {
+          console.warn('Falha ao logar erro Asaas:', logErr);
+        }
 
         return Promise.reject(this.handleError(error));
       }
     );
   }
 
-  /**
-   * Inicializa o service buscando as credenciais criptografadas no banco
-   */
   static async init() {
-    const config = await prisma.asaasConfig.findFirst({
-      where: { ativo: true }
-    });
+    const configDoc = await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('config').doc('asaas')
+      .get();
 
-    if (!config) {
+    const config = configDoc.data();
+    if (!config?.ativo) {
       throw new Error('Configuração do Asaas não encontrada ou inativa.');
     }
 
-    // Como o schema do AsaasConfig ainda não foi migrado com IV/Tag separados na instrução original,
-    // vamos assumir que a chave está guardada num formato que o decrypt consiga ler.
-    // Para simplificar seguindo a instrução: "apiKeyEncrypted". 
-    // Em um sistema real, o crypto.ts geraria um objeto. Aqui vamos assumir decrypt direto 
-    // ou que a chave será descriptografada via variável de ambiente se o banco falhar.
-    
-    // Decriptografia (ajustada para o formato do crypto.ts que criamos)
-    // Se o banco tiver apenas a string, precisaremos das outras partes.
-    // Por agora, usamos a API_KEY do .env como fallback ou assume-se o decrypt configurado.
-    const apiKey = process.env.ASAAS_API_KEY || ''; 
+    const apiKey = config.apiKeyEncrypted 
+      ? decrypt(config.apiKeyEncrypted)
+      : process.env.ASAAS_API_KEY || '';
     
     return new AsaasService(apiKey, config.environment as 'sandbox' | 'production');
   }

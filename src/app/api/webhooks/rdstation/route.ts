@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { adminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
+
+const AGENCY_ID = "audazz-nexus";
 
 /**
  * Webhook RD Station - Audazz Nexus OS
@@ -11,37 +14,37 @@ export async function POST(req: NextRequest) {
     const payload = await req.json();
     
     // Log do webhook
-    await prisma.rdStationWebhookLog.create({
-      data: {
-        tipo: "CONVERSÃO",
-        payload: payload,
-      }
-    });
+    await adminDb
+      .collection('agencies').doc(AGENCY_ID)
+      .collection('webhookLogs').doc()
+      .set({
+        tipo: "RDSTATION",
+        payload,
+        createdAt: FieldValue.serverTimestamp()
+      });
 
     const leads = payload.leads || [];
 
     for (const lead of leads) {
-      // Criar ou atualizar lead no CRM local
-      await prisma.rdStationLead.upsert({
-        where: { id: lead.id || 'new' }, // Ajustar conforme ID do RD
-        update: {
-          nome: lead.name,
-          telefone: lead.personal_phone,
-          empresa: lead.company,
-          cargo: lead.job_title,
-          tags: lead.tags || [],
-          updatedAt: new Date()
-        },
-        create: {
-          email: lead.email,
-          nome: lead.name,
-          telefone: lead.personal_phone,
-          empresa: lead.company,
-          cargo: lead.job_title,
-          tags: lead.tags || [],
-          origem: lead.last_conversion?.source || "RD Station",
-        }
-      });
+      if (!lead.email) continue;
+
+      // Cria ou atualiza lead no CRM local via Firestore
+      const leadRef = adminDb
+        .collection('agencies').doc(AGENCY_ID)
+        .collection('leads').doc(lead.id || lead.email.replace(/[@.]/g, '_'));
+
+      await leadRef.set({
+        id: lead.id,
+        email: lead.email,
+        nome: lead.name,
+        telefone: lead.personal_phone || null,
+        empresa: lead.company || null,
+        cargo: lead.job_title || null,
+        tags: lead.tags || [],
+        origem: lead.last_conversion?.source || "RD Station",
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp()
+      }, { merge: true });
     }
 
     return NextResponse.json({ success: true });
