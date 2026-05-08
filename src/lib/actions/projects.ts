@@ -3,7 +3,7 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -24,9 +24,10 @@ const ProjectSchema = z.object({
  * Cria um novo projeto no Firestore.
  */
 export async function createProjectAction(data: z.infer<typeof ProjectSchema>) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session || !session.uid) return { success: false, error: 'Não autorizado' }
+  const userId = session.uid
+  const userEmail = session.email || 'admin@audazz.com'
 
   try {
     const validated = ProjectSchema.parse(data)
@@ -36,10 +37,10 @@ export async function createProjectAction(data: z.infer<typeof ProjectSchema>) {
       ...validated,
       deadline: validated.deadline ? new Date(validated.deadline) : null,
       responsibleId: userId,
-      responsibleName: user.fullName || user.emailAddresses[0].emailAddress,
+      responsibleName: userEmail,
       team: [{ 
         userId, 
-        userName: user.fullName || user.emailAddresses[0].emailAddress, 
+        userName: userEmail, 
         role: 'owner' 
       }],
       totalApprovals: 0,
@@ -54,7 +55,7 @@ export async function createProjectAction(data: z.infer<typeof ProjectSchema>) {
     await logAudit({
       agencyId: validated.agencyId,
       userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userEmail: userEmail,
       userRole: 'admin',
       acao: 'CREATE',
       recurso: 'PROJECT',
@@ -75,9 +76,10 @@ export async function createProjectAction(data: z.infer<typeof ProjectSchema>) {
  * Atualiza o status de um projeto.
  */
 export async function updateProjectStatusAction(agencyId: string, projectId: string, newStatus: string) {
-  const { userId } = await auth()
-  const user = await currentUser()
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  const session = await getPortalSession()
+  if (!session || !session.uid) return { success: false, error: 'Não autorizado' }
+  const userId = session.uid
+  const userEmail = session.email || 'admin@audazz.com'
 
   try {
     const projectRef = adminDb.collection('agencies').doc(agencyId).collection('projects').doc(projectId)
@@ -90,7 +92,7 @@ export async function updateProjectStatusAction(agencyId: string, projectId: str
     await logAudit({
       agencyId,
       userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userEmail: userEmail,
       userRole: 'admin',
       acao: 'UPDATE_STATUS',
       recurso: 'PROJECT',

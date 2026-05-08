@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useCollaborators } from "@/hooks/use-collaborators"
 import { Check, ChevronRight, ChevronLeft, Loader2, User, Briefcase, Wallet, ShieldCheck, UserPlus, Camera, Plus, Copy, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
+import { formatCPF } from "@/lib/utils"
 
 export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState(1)
@@ -53,16 +54,34 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
     }
   }
 
-  const nextStep = () => setStep(s => Math.min(s + 1, 4))
+  const nextStep = async () => {
+    let fieldsToValidate: any[] = []
+    if (step === 1) fieldsToValidate = ["nome", "cpf", "emailProfissional"]
+    if (step === 2) fieldsToValidate = ["cargo", "departamento"]
+    if (step === 3) fieldsToValidate = ["vinculo"]
+    
+    console.log(`Validating step ${step} fields:`, fieldsToValidate)
+    const isValid = await form.trigger(fieldsToValidate)
+    
+    if (isValid) {
+      setStep(s => Math.min(s + 1, 4))
+    } else {
+      console.warn("Validation failed for fields:", form.formState.errors)
+      toast.error("Por favor, preencha os campos obrigatórios corretamente.")
+    }
+  }
   const prevStep = () => setStep(s => Math.max(s - 1, 1))
 
   const onSubmit = async (data: CollaboratorFullValues) => {
+    console.log("Submitting collaborator data:", data)
     const result: any = await handleCreate(data)
     if (result && result.success) {
       setCreatedData({
         accessId: result.accessId,
         password: result.password
       })
+    } else {
+      console.error("Submission failed:", result)
     }
   }
 
@@ -217,7 +236,16 @@ export function ColaboradorWizard({ onComplete }: { onComplete: () => void }) {
                 </div>
                 <div className="space-y-2">
                   <Label>CPF</Label>
-                  <Input {...register("cpf")} placeholder="000.000.000-00" className="bg-secondary/30 border-none rounded-xl h-11" />
+                  <Input 
+                    {...register("cpf")} 
+                    onChange={(e) => {
+                      e.target.value = formatCPF(e.target.value);
+                      register("cpf").onChange(e);
+                    }}
+                    placeholder="000.000.000-00" 
+                    className="bg-secondary/30 border-none rounded-xl h-11" 
+                    maxLength={14}
+                  />
                   {errors.cpf && <p className="text-xs text-destructive">{errors.cpf.message}</p>}
                 </div>
                 <div className="space-y-2">

@@ -3,7 +3,7 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -24,12 +24,13 @@ const ClientSchema = z.object({
  * Server Action para criar um novo cliente no Firestore via Admin SDK.
  */
 export async function createClientAction(data: z.infer<typeof ClientSchema>) {
-  const { userId } = await auth()
-  const user = await currentUser()
+  const session = await getPortalSession()
   
-  if (!userId || !user) {
-    return { success: false, error: 'Sesso expirada ou no autorizada' }
+  if (!session || !session.uid) {
+    return { success: false, error: 'Sessão expirada ou não autorizada' }
   }
+  const userId = session.uid
+  const userEmail = session.email || 'admin@audazz.com'
 
   try {
     const validatedData = ClientSchema.parse(data)
@@ -43,7 +44,7 @@ export async function createClientAction(data: z.infer<typeof ClientSchema>) {
     const newClient = {
       ...validatedData,
       responsibleUserId: userId,
-      responsibleUserName: user.fullName || user.emailAddresses[0].emailAddress,
+      responsibleUserName: userEmail,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       deletedAt: null,
@@ -57,7 +58,7 @@ export async function createClientAction(data: z.infer<typeof ClientSchema>) {
     await logAudit({
       agencyId: validatedData.agencyId,
       userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userEmail: userEmail,
       userRole: 'admin', // Idealmente buscado de uma coleo de 'profiles'
       acao: 'CREATE',
       recurso: 'CLIENT',
@@ -79,10 +80,11 @@ export async function createClientAction(data: z.infer<typeof ClientSchema>) {
  * Server Action para excluso lgica (Soft Delete) de cliente.
  */
 export async function deleteClientAction(agencyId: string, clientId: string) {
-  const { userId } = await auth()
-  const user = await currentUser()
+  const session = await getPortalSession()
 
-  if (!userId || !user) return { success: false, error: 'No autorizado' }
+  if (!session || !session.uid) return { success: false, error: 'Não autorizado' }
+  const userId = session.uid
+  const userEmail = session.email || 'admin@audazz.com'
 
   try {
     const clientRef = adminDb
@@ -99,7 +101,7 @@ export async function deleteClientAction(agencyId: string, clientId: string) {
     await logAudit({
       agencyId,
       userId,
-      userEmail: user.emailAddresses[0].emailAddress,
+      userEmail: userEmail,
       userRole: 'admin',
       acao: 'DELETE_SOFT',
       recurso: 'CLIENT',

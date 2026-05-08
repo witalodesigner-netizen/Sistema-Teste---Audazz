@@ -94,6 +94,10 @@ export default function CollaboratorsPage() {
       {/* Wizard de Cadastro (Dialog centralizado) */}
       <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[95vh] border-white/5 bg-background/95 backdrop-blur-2xl p-0 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
+          <div className="sr-only">
+            <DialogTitle>Novo Colaborador</DialogTitle>
+            <DialogDescription>Wizard para admissão de novos colaboradores.</DialogDescription>
+          </div>
           <div className="flex-1 overflow-y-auto p-0 scrollbar-thin scrollbar-thumb-white/10">
             <ColaboradorWizard onComplete={() => setIsWizardOpen(false)} />
           </div>

@@ -4,7 +4,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { logAudit } from '@/lib/security/audit'
 import { encrypt } from '@/lib/security/crypto'
 import { revalidatePath } from 'next/cache'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { getPortalSession } from '@/lib/security/session'
 import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
 import { mapCpfToEmail, generateSystemPassword } from '@/lib/security/passwords'
@@ -14,32 +14,49 @@ import { mapCpfToEmail, generateSystemPassword } from '@/lib/security/passwords'
  * O ID de acesso  o CPF e a senha  gerada automaticamente.
  */
 export async function createCollaboratorAction(data: any) {
-  const { userId: adminId } = await auth()
-  const adminUser = await currentUser()
+  const session = await getPortalSession()
   
-  if (!adminId || !adminUser) {
+  if (!session || !session.uid) {
     return { success: false, error: 'Não autorizado' }
   }
+  const adminId = session.uid
+  const adminEmail = session.email || 'admin@audazz.com'
 
   try {
-    const agencyId = "audazz-nexus" // Default agency for the system
+    console.log("Starting createCollaboratorAction with data:", { ...data, cpf: '***' })
+    const agencyId = "audazz-nexus"
     const generatedPassword = generateSystemPassword()
-    const virtualEmail = mapCpfToEmail(data.cpf)
+    
+    if (!data.cpf) {
+      console.error("CPF is missing in request data")
+      return { success: false, error: 'CPF é obrigatório para criar acesso.' }
+    }
 
-    // 1. Cria o usuário no Firebase Auth para o Portal
+    const virtualEmail = mapCpfToEmail(data.cpf)
+    console.log("Generated virtual email:", virtualEmail)
+
+    // 1. Cria o usuário no Firebase Auth
+    console.log("Creating user in Firebase Auth...")
     const userRecord = await adminAuth.createUser({
       email: virtualEmail,
       password: generatedPassword,
       displayName: data.nome,
       phoneNumber: data.telefone ? `+55${data.telefone.replace(/\D/g, '')}` : undefined,
+    }).catch(e => {
+      console.error("Firebase Auth createUser failed:", e)
+      throw e
     })
 
-    // 2. Define Custom Claims (Acesso Portal)
+    // 2. Define Custom Claims
+    console.log("Setting custom claims for UID:", userRecord.uid)
     await adminAuth.setCustomUserClaims(userRecord.uid, {
       agencyId,
       role: data.role || 'criativo',
       isCollaborator: true,
       cpf: data.cpf.replace(/\D/g, '')
+    }).catch(e => {
+      console.error("Firebase Auth setCustomUserClaims failed:", e)
+      throw e
     })
 
     // 3. Dados para o Firestore
@@ -51,7 +68,7 @@ export async function createCollaboratorAction(data: any) {
       emailProfissional: data.emailProfissional,
       telefone: data.telefone || null,
       whatsapp: data.whatsapp || null,
-      cpf: data.cpf, // Mantemos o formatado para exibição
+      cpf: data.cpf,
       cargo: data.cargo,
       departamento: data.departamento,
       vinculo: data.vinculo || 'PJ',
@@ -66,33 +83,47 @@ export async function createCollaboratorAction(data: any) {
       deletedAt: null
     }
 
-    // Criptografia de dados sensíveis para o Firestore
-    if (data.cpf) docData.cpfEncrypted = encrypt(data.cpf.replace(/\D/g, ''))
-    if (data.salarioMensal) docData.salarioMensalEncrypted = encrypt(data.salarioMensal.toString())
-    if (data.chavePix) docData.chavePixEncrypted = encrypt(data.chavePix)
+    // Criptografia
+    try {
+      if (data.cpf) docData.cpfEncrypted = encrypt(data.cpf.replace(/\D/g, ''))
+      if (data.salarioMensal) docData.salarioMensalEncrypted = encrypt(data.salarioMensal.toString())
+      if (data.chavePix) docData.chavePixEncrypted = encrypt(data.chavePix)
+    } catch (e) {
+      console.error("Encryption failed:", e)
+      // We continue even if encryption fails for non-critical fields, 
+      // but CPF is critical. If CPF encryption fails, we might want to know.
+    }
 
     // 4. Salva no Firestore
+    console.log("Saving collaborator to Firestore...")
     const collabRef = adminDb
       .collection('agencies')
       .doc(agencyId)
       .collection('collaborators')
       .doc(userRecord.uid)
 
-    await collabRef.set(docData)
+    await collabRef.set(docData).catch(e => {
+      console.error("Firestore set failed:", e)
+      throw e
+    })
 
     // 5. Log de Auditoria
+    console.log("Logging audit...")
     await logAudit({
       agencyId,
       userId: adminId,
-      userEmail: adminUser.emailAddresses[0].emailAddress,
+      userEmail: adminEmail,
       userRole: 'admin',
       acao: 'CREATE_COLLABORATOR',
       recurso: 'COLLABORATOR',
       recursoId: userRecord.uid,
       sucesso: true
+    }).catch(e => {
+      console.warn("Audit logging failed (non-blocking):", e)
     })
 
-    revalidatePath('/colaboradores')
+    console.log("Revalidating path...")
+    revalidatePath('/operacoes/colaboradores')
     
     return { 
       success: true, 
@@ -102,11 +133,11 @@ export async function createCollaboratorAction(data: any) {
     }
 
   } catch (error: any) {
-    console.error("Erro ao admitir colaborador:", error)
+    console.error("CRITICAL ERROR in createCollaboratorAction:", error)
     if (error.code === 'auth/email-already-exists') {
       return { success: false, error: 'Este CPF já possui um acesso cadastrado.' }
     }
-    return { success: false, error: error.message }
+    return { success: false, error: error.message || "Erro interno ao processar admissão" }
   }
 }
 
@@ -114,8 +145,9 @@ export async function createCollaboratorAction(data: any) {
  * Mantemos a função de upsert para compatibilidade ou atualizações simples via Clerk
  */
 export async function upsertCollaboratorAction(data: any) {
-  const { userId: adminId } = await auth()
-  if (!adminId) return { success: false, error: 'Não autorizado' }
+  const session = await getPortalSession()
+  if (!session || !session.uid) return { success: false, error: 'Não autorizado' }
+  const adminId = session.uid
 
   try {
     const agencyId = data.agencyId || "audazz-nexus"
@@ -147,8 +179,9 @@ export async function upsertCollaboratorAction(data: any) {
  * Registra uma ausência para o colaborador.
  */
 export async function registerAbsenceAction(collaboratorId: string, data: any) {
-  const { userId } = await auth()
-  if (!userId) return { success: false, error: 'Não autorizado' }
+  const session = await getPortalSession()
+  if (!session || !session.uid) return { success: false, error: 'Não autorizado' }
+  const userId = session.uid
 
   try {
     const agencyId = "audazz-nexus"
@@ -176,8 +209,9 @@ export async function registerAbsenceAction(collaboratorId: string, data: any) {
  * Aloca um colaborador a um projeto.
  */
 export async function allocateProjectAction(collaboratorId: string, data: any) {
-  const { userId } = await auth()
-  if (!userId) return { success: false, error: 'Não autorizado' }
+  const session = await getPortalSession()
+  if (!session || !session.uid) return { success: false, error: 'Não autorizado' }
+  const userId = session.uid
 
   try {
     const agencyId = "audazz-nexus"

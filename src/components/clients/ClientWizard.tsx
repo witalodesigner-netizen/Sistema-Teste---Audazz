@@ -33,13 +33,21 @@ export function ClientWizard({ onComplete }: { onComplete: () => void }) {
 
   const { register, handleSubmit, formState: { errors } } = form
 
-  const nextStep = () => setStep(s => Math.min(s + 1, 2))
+  const nextStep = async () => {
+    const fieldsToValidate = step === 1 ? ["name"] : []
+    const isValid = await form.trigger(fieldsToValidate as any)
+    if (isValid) setStep(s => Math.min(s + 1, 2))
+  }
+
   const prevStep = () => setStep(s => Math.max(s - 1, 1))
 
   const onSubmit = async (data: ClientValues) => {
+    console.log("Submitting client data:", data)
     const result = await handleCreate(data)
     if (result && result.success) {
       setIsFinished(true)
+    } else {
+      console.error("Client creation failed:", result)
     }
   }
 

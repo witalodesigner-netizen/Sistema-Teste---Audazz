@@ -8,7 +8,7 @@ export const collaboratorPersonalSchema = z.object({
   dataNascimento: z.date(), // Removido required_error que estava causando erro no TS
   emailPessoal: z.string().email("E-mail pessoal inválido").optional().or(z.literal("")),
   emailProfissional: z.string().email("E-mail profissional inválido"),
-  telefone: z.string().min(10, "Telefone inválido"),
+  telefone: z.string().optional(),
   whatsapp: z.string().optional(),
   cep: z.string().optional(),
   logradouro: z.string().optional(),

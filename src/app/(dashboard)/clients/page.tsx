@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Users, Plus, Search, Mail, Phone, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,8 +9,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { motion } from "framer-motion"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { ClientWizard } from "@/components/clients/ClientWizard"
+import Link from "next/link"
 
 const clients = [
   { id: "CL-001", name: "TechFlow Solutions", contact: "Ricardo Santos", email: "ricardo@techflow.com", revenue: "R$ 150k/ano", status: "Ativo", icon: "TF" },
@@ -39,6 +41,10 @@ export default function ClientsPage() {
 
       <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
         <DialogContent className="sm:max-w-2xl border-white/5 bg-background/95 backdrop-blur-2xl p-0 rounded-[2rem] shadow-2xl overflow-hidden">
+          <div className="sr-only">
+            <DialogTitle>Novo Cliente</DialogTitle>
+            <DialogDescription>Wizard para cadastro de novos clientes.</DialogDescription>
+          </div>
           <ClientWizard onComplete={() => setIsWizardOpen(false)} />
         </DialogContent>
       </Dialog>
